@@ -43,12 +43,13 @@ stats = {"complete": 0, "downloaded": 0, "no_data": 0}
 
 
 # Change this number to the KIC ID where you want to resume
-start_kic = 5383275 
+start_kic =  10286378 
 
-#5289571 problems started at this one
+# 8025383 problems started at this one
 
 # Find where that KIC is in the list and slice it
 start_index = kic_ids.index(start_kic)
+#start_index=0 #start from the beginning
 for i, kic in enumerate(kic_ids[start_index:], start=start_index):
     # Skip potential headers or malformed rows
     try:
