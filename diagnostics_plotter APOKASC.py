@@ -6,6 +6,9 @@ import os
 import pandas as pd
 from scipy.ndimage import gaussian_filter1d
 
+from scipy.optimize import minimize
+
+
 def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3", proc_dir="./processed_ml_data_APOKASC3", catalog_path="./table4APOKASC.txt", filter_type="80d"):
     kic_padded = str(int(kic_id)).zfill(9)
 
@@ -65,7 +68,7 @@ def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3",
         data_lc = np.load(lc_npy_path)
         ax2.plot(data_lc[0], data_lc[1], color='black', lw=0.5)
         ax2.set_title("Normalized Time-Series")
-        ax2.set_ylabel("Std Flux")
+        ax2.set_ylabel("Normalized Flux")
     else:
         ax2.text(0.5, 0.5, "Time-domain NPY Not Found", ha='center')
 
@@ -83,6 +86,7 @@ def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3",
         
         # --- CALCULATION LOGIC ---
         # Weighting power by freq^2 to flatten granulation and find the oscillation hump
+        #Our_v_max: flattened background + gaussian filter for neightbours to remove spikes, then search for the peak. Our_d_nu follows a standard scaling relation.
         search_mask = (p_freq > 5.0) & (p_freq < 1000.0)
         f_search = p_freq[search_mask]
         weighted_p = p_power[search_mask] * (f_search**2) #flattens background to highlight the hump
@@ -133,7 +137,7 @@ def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3",
             precise_v_max = popt[1]
         except:
             precise_v_max = our_v_max # Fallback
-
+        # Rigorous vmax: takes a window already centered around our_v_max (12 our_d_nu’s around it and subtracts the stellar background (modelled with a sigma 100 gaussian, capturing the granulation). Then applies a second gaussian filter (a 30 sigma envelope which smoothes the spikes into a clean hump). Then an iterative process (which is curve fitting) fits a bell curve into the hump_envelope1, providing initial data (p0: height is the max of the hump_envelope, ourv_max guesses the center of the hump and our_v_max*0.1 guesses the width).
         # 2. Precise D_nu via Autocorrelation Function (ACF)
         # This measures the actual spacing of the peaks instead of using a formula
         def calculate_precise_dnu(freq, power, central_v_max):
@@ -142,7 +146,7 @@ def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3",
             f_acf = freq[mask]
             p_acf = power[mask]
             
-            # Compute Autocorrelation
+            # Compute Autocorrelation: matching score for different lags, which should show peaks at multiples of D_nu
             n = len(p_acf)
             acf = np.correlate(p_acf - np.mean(p_acf), p_acf - np.mean(p_acf), mode='full')[n-1:]
             lags = np.arange(len(acf)) * (f_acf[1] - f_acf[0])
@@ -166,11 +170,12 @@ def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3",
         print("-" * 40)
         # --- END OF RIGOROUS BLOCK ---
 
+
         ax4.loglog(p_freq, p_power, color='royalblue', lw=0.8)
-        ax4.axvline(our_v_max, color='green', lw=2, label=f'Calc v_max: {our_v_max:.1f}')
-        ax4.axvline(precise_v_max, color='blue', lw=2, label=f'Precise v_max: {precise_v_max:.1f}')
+        ax4.axvline(our_v_max, color='green', lw=2, label=f'Calc v_max: {our_v_max:.2f}') #our v_max with 2
+        ax4.axvline(precise_v_max, color='blue', lw=2, label=f'Precise v_max: {precise_v_max:.2f}')
         if v_max_lit:
-            ax4.axvline(v_max_lit, color='red', linestyle='--', alpha=0.6, label=f'Lit v_max: {v_max_lit:.1f}')
+            ax4.axvline(v_max_lit, color='red', linestyle='--', alpha=0.6, label=f'Lit v_max: {v_max_lit:.2f}')
         ax4.set_xlim(0.01, 5000); ax4.set_xlabel("Frequency (µHz)")
         ax4.legend()
         
@@ -198,10 +203,12 @@ def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3",
         # We subtract the background to isolate the power excess
         osc_hump = p_zoom - bg_smooth
         # Apply a gentler smoothing to show the Gaussian-like envelope
-        hump_envelope = gaussian_filter1d(osc_hump, sigma=30)
+        hump_envelope = gaussian_filter1d(osc_hump, sigma=70)
         
         az2.plot(f_zoom, osc_hump, color='gray', lw=0.5, alpha=0.5)
         az2.plot(f_zoom, hump_envelope, color='royalblue', lw=2, label='Isolated Oscillation Hump')
+        # It sets the bottom to slightly below zero and the top to 1.5x the height of the hump
+        az2.set_ylim(-0.003, np.max(hump_envelope) *7)
         az2.fill_between(f_zoom, 0, hump_envelope, color='royalblue', alpha=0.2)
         az2.set_title("Oscillation Power Contribution Alone")
         az2.set_ylabel("ppm²/µHz")
@@ -221,5 +228,94 @@ def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3",
     plt.show()
 
 # Run for a Red Giant from APOKASC-3
-plot_comprehensive_diagnostic(1163114)
-#some stars: 1027337
+plot_comprehensive_diagnostic(6301945, filter_type="20d")
+#some stars: 1027337, 1163114, 7273426,
+# 4253026, 4263884:cases where the precise and our_v_max differ from the catalog, 
+#3549969 our estimate makes sense with the image (slightly before 30), while catalogue vmax is at 30.46. d_nu also quite different 
+
+
+""""
+        #OTHER RIGOROUS BLOCK
+
+
+
+        def harvey_background(f, white_noise, h1, t1, h2, t2):
+            #Two-component Harvey model + White noise (standard GAU background)
+            return white_noise + h1 / (1 + (f * t1)**4) + h2 / (1 + (f * t2)**4)
+
+        def gau_model(f, white_noise, h1, t1, h2, t2, a_max, nu_max, sigma):
+            #Full GAU model: Background + Gaussian oscillation hump.
+            bg = harvey_background(f, white_noise, h1, t1, h2, t2)
+            oscillation = a_max * np.exp(-(f - nu_max)**2 / (2 * sigma**2))
+            return bg + oscillation
+
+        def fit_vmax_gau_style(freq, power, initial_guess_vmax=None):
+            
+            #Implements GAU pipeline logic: 
+            #1. Grid search via ACF to find proxy v_max and d_nu.
+            #2. MLE fit for precise v_max and A_max.
+            
+            # --- STEP 1: GRID SEARCH (To avoid the 2.8 vs 30 uHz error) ---
+            # GAU searches from 1 uHz to Nyquist every 5 uHz with a 20 uHz window
+            grid_centers = np.arange(5, 280, 5) 
+            best_acf_peak = -1
+            proxy_vmax = 0
+            proxy_dnu = 0
+            
+            for center in grid_centers:
+                mask = (freq > center - 10) & (freq < center + 10)
+                if np.sum(mask) < 20: continue
+                
+                f_sub = freq[mask]
+                p_sub = power[mask]
+                
+                # ACF of the Power Spectrum
+                n = len(p_sub)
+                acf = np.correlate(p_sub - np.mean(p_sub), p_sub - np.mean(p_sub), mode='full')[n-1:]
+                lags = np.arange(len(acf)) * (f_sub[1] - f_sub[0])
+                
+                # Look for a peak in the expected d_nu range for this frequency
+                expected_dnu = 0.26 * (center**0.77)
+                dnu_mask = (lags > expected_dnu * 0.6) & (lags < expected_dnu * 1.4)
+                
+                if np.any(dnu_mask):
+                    peak_val = np.max(acf[dnu_mask])
+                    if peak_val > best_acf_peak:
+                        best_acf_peak = peak_val
+                        proxy_vmax = center
+                        proxy_dnu = lags[dnu_mask][np.argmax(acf[dnu_mask])]
+
+            # Use the grid search result if no user guess is provided
+            vmax_start = initial_guess_vmax if initial_guess_vmax else proxy_vmax
+
+            # --- STEP 2: MLE BACKGROUND + GAUSSIAN FIT ---
+            def nll(params):
+                wn, h1, t1, h2, t2, a, nm, sg = params
+                if any(p <= 0 for p in [wn, h1, t1, h2, t2, a, sg]): return 1e15
+                model = gau_model(freq, wn, h1, t1, h2, t2, a, nm, sg)
+                # Asteroseismic Likelihood (Chi-square 2 d.o.f.)
+                return np.sum(np.log(model) + power/model)
+
+            # Smart initial guesses for the MLE
+            p0 = [
+                np.median(power),      # White noise
+                np.max(power)/2, 100,  # Harvey 1 (granulation)
+                np.max(power)/4, 10,   # Harvey 2 (activity)
+                np.max(power), vmax_start, vmax_start*0.1 # Oscillation hump
+            ]
+
+            res = minimize(nll, p0, method='Nelder-Mead', options={'maxiter': 2000})
+            
+            # Extract results
+            precise_vmax = res.x[6]
+            precise_amax = res.x[5]
+            
+    # Return the three values your code expects to unpack
+            return precise_vmax, proxy_dnu, precise_amax
+        
+        v_max, d_nu, amp = fit_vmax_gau_style(p_freq, p_power, our_v_max)
+        print(f"\nGAU SEISMIC ESTIMATES:")
+        print(f"v_max: {v_max:.2f}")
+        print(f"d_nu: {d_nu:.2f}")
+        print(f"amp: {amp:.2f}")
+        """

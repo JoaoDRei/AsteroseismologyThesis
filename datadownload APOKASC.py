@@ -43,9 +43,8 @@ stats = {"complete": 0, "downloaded": 0, "no_data": 0}
 
 
 # Change this number to the KIC ID where you want to resume
-start_kic =  10286378 
+start_kic =  12256516 
 
-# 8025383 problems started at this one
 
 # Find where that KIC is in the list and slice it
 start_index = kic_ids.index(start_kic)
