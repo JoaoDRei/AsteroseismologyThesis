@@ -1,0 +1,18 @@
+
+data:
+  manifest_path: "./Baseline/manifest.csv"
+  sample_size: 1000  # Set to null or a number
+  mode: "lc"
+  target_length: 65000
+  batch_size: 32
+  num_workers: 4
+  filter_duration: "80d"  # Or null to use all files
+  
+
+model:
+  type: "cnn"
+  learning_rate: 0.001
+  epochs: 50
+
+paths:
+  checkpoint_dir: "./Baseline/results/checkpoints"
