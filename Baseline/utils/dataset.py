@@ -6,34 +6,39 @@ class AstroBaselineDataset(Dataset):
     def __init__(self, manifest_df, mode='lc', target_length=None):
         self.df = manifest_df
         self.mode = mode
-        # Set defaults if not provided
-        if target_length is None:
-            self.target_length = 65000 if mode == 'lc' else 35000
-        else:
-            self.target_length = target_length
+        self.target_length = target_length or (65000 if mode == 'lc' else 35000)
 
     def __getitem__(self, index):
         row = self.df.iloc[index]
-        file_path = row['lc_path'] if self.mode == 'lc' else row['psd_path']
-        
-        # Load [axis, values]
-        data = np.load(file_path)
-        y = data[1] # The flux or power
+        data = np.load(row['lc_path'] if self.mode == 'lc' else row['psd_path'])
         
         if self.mode == 'psd':
-            # INTERPOLATION: Stretch/shrink PSD to target_length
-            x_old = np.linspace(0, 1, len(y))
-            x_new = np.linspace(0, 1, self.target_length)
-            y_final = np.interp(x_new, x_old, y)
-        else:
-            # PADDING/TRUNCATING: For Light Curves
+            freq = data[0]
+            power = data[1]
+            
+            # 1. Physical Cutoff (Nyquist for Kepler is ~283)
+            mask = (freq >= 0.01) & (freq <= 283)
+            freq, power = freq[mask], power[mask]
+            
+            # 2. Log-Scale Power (helps the model see the 'bump')
+            power = np.log10(power + 1e-8)
+            
+            # 3. Physically meaningful interpolation
+            freq_new = np.linspace(freq.min(), freq.max(), self.target_length)
+            y_final = np.interp(freq_new, freq, power)
+            
+        else: # Light Curve mode
+            y = data[1]
+            # 4. Random Cropping (better generalization)
             if len(y) > self.target_length:
-                y_final = y[:self.target_length]
+                start = np.random.randint(0, len(y) - self.target_length)
+                y_final = y[start : start + self.target_length]
             else:
+                # Pad with 0 (which is the mean since pre-process normalization)
                 y_final = np.pad(y, (0, self.target_length - len(y)), mode='constant')
 
         label = torch.tensor(row['nu_max']).float()
-        return torch.tensor(y_final).float().unsqueeze(0), label # Shape: (1, Length)
+        return torch.tensor(y_final).float().unsqueeze(0), label
 
     def __len__(self):
         return len(self.df)

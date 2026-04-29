@@ -6,12 +6,12 @@ def create_manifest(processed_dir, catalog_path, output_csv="./Baseline/manifest
     # 1. Load the APOKASC catalog
     # Adjust names/colspecs based on your specific table4APOKASC.txt format
     names = ['KIC', 'nu_max']
-    colspecs = [(0, 8), (49, 59)] # Example positions for KIC and nu_max
+    colspecs = [(0, 8), (49, 59)] # positions for KIC and nu_max
     catalog = pd.read_fwf(catalog_path, colspecs=colspecs, names=names, skiprows=111)
-    catalog = catalog.dropna(subset=['nu_max'])
-    catalog['KIC'] = catalog['KIC'].astype(int)
+    catalog = catalog.dropna(subset=['nu_max']) # Remove entries without nu_max
+    catalog['KIC'] = catalog['KIC'].astype(int) # Ensure KIC is integer for matching
 
-    # 2. Find all processed files
+    # 2. Find all light curveprocessed files
     lc_files = glob.glob(os.path.join(processed_dir, "*_clean.npy"))
     
     data_list = []
@@ -21,7 +21,7 @@ def create_manifest(processed_dir, catalog_path, output_csv="./Baseline/manifest
             # Extract KIC (digits 4 to 13)
             kic_id = int(filename[4:13])
             
-            # NEW: Extract duration (looking for 20d, 55d, or 80d in filename)
+            #Extract duration (looking for 20d, 55d, or 80d in filename)
             duration = "unknown"
             for d in ["20d", "55d", "80d"]:
                 if d in filename:

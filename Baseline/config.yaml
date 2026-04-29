@@ -1,12 +1,12 @@
 
 data:
   manifest_path: "./Baseline/manifest.csv"
-  sample_size: 1000  # Set to null or a number
-  mode: "lc"
-  target_length: 65000
+  sample_size: 1000 # Set to null (full sample - around 10k) or a number
+  mode: "psd" #lc light curve, psd for power spectrum
+  target_length: null #if none, assumes 65000 for lc mode, 35000 for psd mode. If a value, assumes that value
   batch_size: 32
   num_workers: 4
-  filter_duration: "80d"  # Or null to use all files
+  filter_duration: "20d"  # Or null to use all files
   
 
 model:

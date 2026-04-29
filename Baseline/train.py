@@ -118,6 +118,9 @@ def evaluate_model(model, test_loader, device):
     model.eval()
     all_preds = []
     all_truth = []
+    # Load Configuration
+    with open("./Baseline/config.yaml", "r") as f:
+        config = yaml.safe_load(f)
     
     with torch.no_grad():
         for x, y in test_loader:
@@ -125,15 +128,15 @@ def evaluate_model(model, test_loader, device):
             preds = model(x).squeeze().cpu().numpy()
             all_preds.extend(preds)
             all_truth.extend(np.log10(y.numpy()))
-
+    savepath=f"./Baseline/results/performance_plot_{config['data']['mode']}_{config['model']['type']}_{config['data']['filter_duration']}.png"
     plt.figure(figsize=(8, 6))
     plt.scatter(all_truth, all_preds, alpha=0.5, s=10)
     plt.plot([min(all_truth), max(all_truth)], [min(all_truth), max(all_truth)], 'r--')
     plt.xlabel("True Log10(nu_max)")
     plt.ylabel("Predicted Log10(nu_max)")
-    plt.title("Baseline Model Performance")
-    plt.savefig("./Baseline/results/performance_plot.png")
-    print("📈 Test evaluation plot saved to: results/performance_plot.png")
+    plt.title(f"{config['data']['mode'].upper()} {config['model']['type'].upper()} {config['data']['filter_duration']}  Model Performance")
+    plt.savefig(savepath)
+    print(f"📈 Test evaluation plot saved to: {savepath}")
 
 if __name__ == "__main__":
     train()
