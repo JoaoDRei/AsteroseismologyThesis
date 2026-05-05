@@ -6,39 +6,45 @@ class SimpleCNN(nn.Module):
         super().__init__()
 
         self.features = nn.Sequential(
-            # Block 1
-            nn.Conv1d(1, 16, kernel_size=15, stride=1, padding=7),
+            # Block 1 (large receptive field)
+            nn.Conv1d(1, 16, kernel_size=101, padding=50),
             nn.BatchNorm1d(16),
-            nn.ReLU(),
+            nn.LeakyReLU(negative_slope=0.01),
             nn.MaxPool1d(2),
 
             # Block 2
-            nn.Conv1d(16, 32, kernel_size=15, stride=1, padding=7),
+            nn.Conv1d(16, 32, kernel_size=51, padding=25),
             nn.BatchNorm1d(32),
-            nn.ReLU(),
+            nn.LeakyReLU(negative_slope=0.01),
             nn.MaxPool1d(2),
 
             # Block 3
-            nn.Conv1d(32, 64, kernel_size=31, stride=1, padding=15),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
+            nn.Conv1d(32, 64, kernel_size=25, padding=12),
+            #nn.BatchNorm1d(64),
+            nn.LeakyReLU(negative_slope=0.01),
             nn.MaxPool1d(2),
 
             # Block 4
-            nn.Conv1d(64, 64, kernel_size=31, stride=1, padding=15),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
+            nn.Conv1d(64, 64, kernel_size=15, padding=7),
+            #nn.BatchNorm1d(64),
+            nn.LeakyReLU(negative_slope=0.01),
+            #nn.MaxPool1d(2),
 
-            # Compress to fixed size
+            # Block 5 (refinement)
+            nn.Conv1d(64, 64, kernel_size=7, padding=3),
+            #nn.BatchNorm1d(64),
+            nn.LeakyReLU(negative_slope=0.01),
+
+            # Global pooling
             nn.AdaptiveAvgPool1d(256)
         )
 
         self.regressor = nn.Sequential(
             nn.Flatten(),
             nn.Linear(64 * 256, 128),
-            nn.ReLU(),
+            nn.LeakyReLU(negative_slope=0.01),
             nn.Dropout(0.3),
-            nn.Linear(128, 1)  # predicts log10(nu_max)
+            nn.Linear(128, 1)
         )
 
     def forward(self, x):
