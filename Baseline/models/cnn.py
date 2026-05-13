@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class SimpleCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, ):
         super().__init__()
 
         self.features = nn.Sequential(
@@ -43,8 +43,8 @@ class SimpleCNN(nn.Module):
             nn.Flatten(),
             nn.Linear(64 * 256, 128),
             nn.LeakyReLU(negative_slope=0.01),
-            nn.Dropout(0.3),
-            nn.Linear(128, 1)
+            nn.Dropout(0.1),
+            nn.Linear(128, 2)
         )
 
     def forward(self, x):
