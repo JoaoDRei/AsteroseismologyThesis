@@ -1,10 +1,15 @@
 import torch
 import torch.nn as nn
+import yaml
 
 class SimpleCNN(nn.Module):
-    def __init__(self, ):
+    def __init__(self, output_dim=None):
         super().__init__()
-
+        if output_dim is None:
+            import yaml
+            with open("./Baseline/config.yaml", "r") as f:
+                config = yaml.safe_load(f)
+            output_dim = len(config['model']['targets'])
         self.features = nn.Sequential(
             # Block 1 (large receptive field)
             nn.Conv1d(1, 16, kernel_size=101, padding=50),
@@ -44,7 +49,7 @@ class SimpleCNN(nn.Module):
             nn.Linear(64 * 256, 128),
             nn.LeakyReLU(negative_slope=0.01),
             nn.Dropout(0.1),
-            nn.Linear(128, 2)
+            nn.Linear(128, output_dim)
         )
 
     def forward(self, x):

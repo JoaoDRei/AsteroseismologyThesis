@@ -1,9 +1,9 @@
 
 data:
   manifest_path: "./Baseline/manifest.csv"
-  sample_size: 100 # Set to null (full sample - around 10k) or a number
-  mode: "psd" #lc light curve, psd for power spectrum
-  target_length: null #if none, assumes 65000 for lc mode, 35000 for psd mode. If a value, assumes that value
+  sample_size: null # Set to null (full sample - around 10k) or a number
+  mode: "lc" #lc light curve, psd for power spectrum
+  target_length: null #if null, assumes 65000 for lc mode, 35000 for psd mode. If a value, assumes that value
   batch_size: 64
   num_workers: 4
   filter_duration: "80d"  # Or null to use all files
@@ -14,10 +14,24 @@ model:
   type: "cnn" # cnn, mlp, transformer
   learning_rate: 0.0005
   epochs: 50
-  loss_function: "huber" # mse, l1, huber
+  loss_functions: 
+    nu_max: "huber" # mse, l1, huber
+    delta_nu: "huber" # mse, l1, huber
+    class: bce #bce
   loss_weights:
-    nu: 1.0
-    dnu: 0.5
+    nu_max: 1.0
+    delta_nu: 0.5
+    class: 1.0
+  targets: ["nu_max", "delta_nu", "class"] # ["nu_max", "delta_nu", "class"]
 
 paths:
-  checkpoint_dir: "./Baseline/results/checkpoints"
+  checkpoint_dir: "./results/checkpoints"
+
+interpretability:
+  method: smoothgrad   # "ig" or "smoothgrad"
+  smoothgrad:
+    n_samples: 50
+    noise_std: 0.1
+
+debug:  
+  synthetic: false  #true or false. If true, uses a synthetic dataset instead of the real one. Useful for testing and debugging.
