@@ -56,7 +56,15 @@ def train(config_path="./Baseline/config.yaml"):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"\n🚀 Starting training on device: {device}")
-    os.makedirs(config['paths']['checkpoint_dir'], exist_ok=True)
+
+    checkpoint_dir = config['paths']['checkpoint_dir']
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    checkpoint_name = config['paths'].get('checkpoint_name')
+    if checkpoint_name is None:
+        target_key = "_".join(targets_list)
+        checkpoint_name = f"best_model_{config['model']['type']}_{target_key}.pth"
+    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
 
     
     # 2. Data Loading & Splitting
@@ -99,17 +107,18 @@ def train(config_path="./Baseline/config.yaml"):
         val_kics = unique_kics[train_size:train_size+val_size]
         test_kics = unique_kics[train_size+val_size:]
 
-        def check_class_balance(df, name):
-            print(f"\n{name} distribution:")
-            print(df["evolstate_norm"].value_counts(normalize=True))
-
         train_df = df[df['kic'].isin(train_kics)]
         val_df   = df[df['kic'].isin(val_kics)]
         test_df  = df[df['kic'].isin(test_kics)]
 
-        check_class_balance(train_df, "Train")
-        check_class_balance(val_df, "Validation")
-        check_class_balance(test_df, "Test")
+        if "class" in config["model"]["targets"]:
+            def check_class_balance(df, name):
+                print(f"\n{name} distribution:")
+                print(df["evolstate_norm"].value_counts(normalize=True))
+
+            check_class_balance(train_df, "Train")
+            check_class_balance(val_df, "Validation")
+            check_class_balance(test_df, "Test")
     
     if synthetic:
         full_ds = SyntheticPSDPeakDataset(n_samples=2000, length=config['data']['target_length'])
@@ -167,6 +176,13 @@ def train(config_path="./Baseline/config.yaml"):
 
 
     best_val_loss = float('inf')
+    # Early stopping configuration (defaults: patience=10, min_delta=1e-4, restore_best_weights=True)
+    es_cfg = config.get('training', {}).get('early_stopping', {})
+    es_patience = es_cfg.get('patience', 15)
+    es_min_delta = es_cfg.get('min_delta', 1e-4)
+    es_restore_best = es_cfg.get('restore_best_weights', True)
+    epochs_no_improve = 0
+    best_model_state = None
     print("\n--- Training Started ---")
 
     # safe lookup for weights in case some targets are not present
@@ -231,17 +247,37 @@ def train(config_path="./Baseline/config.yaml"):
         current_lr = optimizer.param_groups[0]['lr']
         print(f"Current Learning Rate: {current_lr}")
 
-        if avg_val < best_val_loss:
+        # Check for improvement with a minimum delta to avoid tiny fluctuations
+        if avg_val < best_val_loss - es_min_delta:
             best_val_loss = avg_val
-            torch.save(model.state_dict(), f"{config['paths']['checkpoint_dir']}/best_model.pth")
-            print(f"⭐ New best model saved with Val Loss: {best_val_loss:.4f}")
+            # Store a CPU copy of the best model state_dict for safe restore
+            best_model_state = {k: v.cpu() for k, v in model.state_dict().items()}
+            torch.save(best_model_state, checkpoint_path)
+            # Keep a legacy generic copy for old scripts that still load best_model.pth
+            torch.save(best_model_state, os.path.join(config['paths']['checkpoint_dir'], 'best_model.pth'))
+            print(f"⭐ New best model saved with Val Loss: {best_val_loss:.4f} ({checkpoint_name})")
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            print(f"⚠️  No improvement for {epochs_no_improve}/{es_patience} epochs (min_delta={es_min_delta})")
+            if epochs_no_improve >= es_patience:
+                print(f"⏱️  Early stopping triggered (patience={es_patience}).")
+                if es_restore_best and best_model_state is not None:
+                    # restore best weights to model on the correct device
+                    restore_state = {k: v.to(device) for k, v in best_model_state.items()}
+                    model.load_state_dict(restore_state)
+                    # save restored (device) model as CPU state dict for consistency
+                    torch.save({k: v.cpu() for k, v in model.state_dict().items()}, checkpoint_path)
+                    torch.save({k: v.cpu() for k, v in model.state_dict().items()}, os.path.join(config['paths']['checkpoint_dir'], 'best_model.pth'))
+                    print("🔁 Restored best model weights and saved checkpoint.")
+                break
 
     # 5. Final Evaluation
     print("\n--- Final Evaluation on Test Set ---")
-    model.load_state_dict(torch.load(f"{config['paths']['checkpoint_dir']}/best_model.pth"))   
-    evaluate_model(model, test_loader, device, config, config['data']['manifest_path'], test_idx)
+    model.load_state_dict(torch.load(checkpoint_path))   
+    evaluate_model(model, test_loader, device, config, config['data']['manifest_path'], test_idx, checkpoint_path)
 
-def evaluate_model(model, test_loader, device, config, manifest_path, test_idx):
+def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, checkpoint_path):
     
 
 
@@ -324,7 +360,7 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx):
     model_source_file = os.path.join(base_dir, "models", f"{config['model']['type']}.py")
     shutil.copy(model_source_file, f"{exp_dir}/model_architecture.py")
     #copy the best model checkpoint into the folder as well
-    shutil.copy(f"{config['paths']['checkpoint_dir']}/best_model.pth", f"{exp_dir}/best_model.pth")
+    shutil.copy(checkpoint_path, f"{exp_dir}/best_model.pth")
     
     # copy the synthetic config file if in synthetic mode
     if synthetic:
@@ -503,7 +539,7 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx):
 
         # A2Z errors
         a2z_nu_mse = np.mean((merged.loc[validA2Z,'a2z_log'] - merged.loc[validA2Z,'truth_log_nu_max'])**2) if validA2Z.any() else np.nan
-        a2z_nu_rmse = np.sqrt(a2z_nu_mse) if not np.isnan(a2z_nu_mse) else np.nan
+        a2z_nu_rmse = np.sqrt(a2z_nu_mse) if not np.isnan(a2z_nu_mse) else np.nan 
         a2z_dnu_mse = np.mean((merged.loc[valid_dnu_a2z,'delta_nu_a2z_log'] - merged.loc[valid_dnu_a2z,'truth_log_delta_nu'])**2) if ("delta_nu" in targets_list and valid_dnu_a2z.any()) else np.nan
         a2z_dnu_rmse = np.sqrt(a2z_dnu_mse) if not np.isnan(a2z_dnu_mse) else np.nan
 

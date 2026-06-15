@@ -303,21 +303,40 @@ def main():
     def resolve_relative_path(config_path, path):
         if os.path.isabs(path):
             return path
+        cwd_path = os.path.normpath(os.path.join(os.getcwd(), path))
+        if os.path.exists(cwd_path):
+            return cwd_path
         base_dir = os.path.dirname(os.path.abspath(config_path))
-        return os.path.join(base_dir, path)
+        config_path_candidate = os.path.normpath(os.path.join(base_dir, path))
+        if os.path.exists(config_path_candidate):
+            return config_path_candidate
+        return cwd_path
 
     checkpoint_dir = config['paths']['checkpoint_dir']
     checkpoint_dir = resolve_relative_path(loaded_config_path, checkpoint_dir)
-    ckpt_path = os.path.join(checkpoint_dir, "best_model.pth")
+    checkpoint_name = config['paths'].get('checkpoint_name')
+    if checkpoint_name is None:
+        target_key = "_".join(config['model'].get('targets', []))
+        checkpoint_name = f"best_model_{config['model']['type']}_{target_key}.pth"
+    ckpt_path = os.path.normpath(os.path.join(checkpoint_dir, checkpoint_name))
+    print("Loading checkpoint from:", ckpt_path)
     if not os.path.exists(ckpt_path):
-        raise FileNotFoundError(
-            f"Checkpoint not found at {ckpt_path}.\n"
-            f"Loaded config: {loaded_config_path}\n"
-            f"checkpoint_dir: {checkpoint_dir}\n"
-            f"Make sure the synthetic config is being used when debug.synthetic=true."
-        )
+        fallback_path = os.path.normpath(os.path.join(checkpoint_dir, "best_model.pth"))
+        if os.path.exists(fallback_path):
+            print(f"⚠️ Specific checkpoint not found, falling back to legacy checkpoint: {fallback_path}")
+            ckpt_path = fallback_path
+        else:
+            raise FileNotFoundError(
+                f"Checkpoint not found at {ckpt_path}.\n"
+                f"Loaded config: {loaded_config_path}\n"
+                f"checkpoint_dir: {checkpoint_dir}\n"
+                f"checkpoint_name: {checkpoint_name}\n"
+                f"Make sure the synthetic config is being used when debug.synthetic=true."
+            )
 
-    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+    ckpt = torch.load(ckpt_path, map_location=device)
+    print("Final layer weight shape:", ckpt["regressor.4.weight"].shape)
+    model.load_state_dict(ckpt)
     model.eval()
     mode = config["data"]["mode"]
     print(f"Loaded model from {ckpt_path}")
@@ -445,7 +464,7 @@ def main():
                 config=config
             )
         print(f"Processed sample {i} | KIC={kic[0]}")
-        print("freq:", freq.shape, "attr:", attr.shape)
+        print("x_axis:", x_axis.shape, "attr:", attr.shape)
     print(f"\nSaved saliency maps to: {out_dir}")
 
 
