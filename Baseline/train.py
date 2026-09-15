@@ -12,7 +12,7 @@ from models import SimpleMLP, SimpleCNN, SimpleTransformer
 import datetime
 import shutil
 import seaborn as sns
-
+from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 def train(config_path="./Baseline/config.yaml"):
     # 1. Load Configuration
     with open(config_path, "r") as f:
