@@ -8,15 +8,35 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Subset
 from utils import AstroBaselineDataset, SyntheticPSDPeakDataset
-from models import SimpleMLP, SimpleCNN, SimpleTransformer
+from models import SimpleMLP, SimpleCNN, SimpleTransformer, MobileNet1D, ResNet1D, CNNLSTM, AstroConformer, AstroConformerV2, CNNBiLSTMEncoder, CNNBiLSTM
 import datetime
 import shutil
 import seaborn as sns
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
+import random
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+
 def train(config_path="./Baseline/config.yaml"):
     # 1. Load Configuration
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
+
+
+    seed = config["training"]["seed"]
+    set_seed(seed)
+
 
     # If the main config only signals synthetic mode, switch to the synthetic config.
     synthetic = config.get("debug", {}).get("synthetic", False)
@@ -91,12 +111,20 @@ def train(config_path="./Baseline/config.yaml"):
             print(f"🔍 Filtering for duration: {config['data']['filter_duration']}")
             df = df[df['duration'] == config['data']['filter_duration']].reset_index(drop=True)
 
+        if "metallicity" in config["model"]["targets"]:
+            before = len(df)
+            df = df[
+                df["metallicity"].notna()
+                & (df["metallicity"] != -9999)
+            ].reset_index(drop=True)
+            print(f"Dropped {before - len(df)} rows with missing metallicity")
+
         unique_kics = df['kic'].unique()
-        np.random.seed(42)
+        np.random.seed(seed)
         np.random.shuffle(unique_kics)
 
         sample_size = config['data'].get('sample_size')
-        if sample_size:
+        if sample_size is not None:
             unique_kics = unique_kics[:sample_size]
             df = df[df['kic'].isin(unique_kics)].reset_index(drop=True)
 
@@ -123,7 +151,7 @@ def train(config_path="./Baseline/config.yaml"):
     if synthetic:
         full_ds = SyntheticPSDPeakDataset(n_samples=2000, length=config['data']['target_length'])
         indices = np.arange(len(full_ds))
-        np.random.seed(42)
+        np.random.seed(seed)
         np.random.shuffle(indices)
 
         n_train = int(0.8 * len(indices))
@@ -155,6 +183,44 @@ def train(config_path="./Baseline/config.yaml"):
         model = SimpleMLP(input_size=full_ds.target_length, output_dim=len(targets_list))
     elif config['model']['type'] == 'transformer':
         model = SimpleTransformer(seq_length=config['data']['seq_length'], output_dim=len(targets_list))
+    elif config['model']['type'] == "resnet1d":
+        model = ResNet1D(output_dim=len(targets_list))
+
+    elif config['model']['type'] == "mobilenet1d":
+        model = MobileNet1D(output_dim=len(targets_list))
+
+    elif config['model']['type'] == "cnn_lstm":
+        model = CNNLSTM(output_dim=len(targets_list))
+
+    elif config['model']['type'] == "cnn_bilstm":
+
+        model = CNNBiLSTM(
+            output_dim=len(targets_list),
+            hidden_size=config["model"]["hidden_size"],
+            num_layers=config["model"]["num_layers"]
+    )
+
+    elif config['model']['type'] == "astroconformer":
+        model = AstroConformer(
+            encoder_dim=config['model']['encoder_dim'],
+            num_heads=config['model']['num_heads'],
+            num_layers=config['model']['num_layers'],
+            patch_size=config['model']['patch_size'],
+            conv_kernel_size=config['model']['conv_kernel_size'],
+            dropout=config['model']['dropout'],
+            output_dim=len(targets_list)
+        )
+
+    elif config['model']['type'] == "astroconformer_v2":
+        model = AstroConformerV2(
+            encoder_dim=config['model']['encoder_dim'],
+            num_heads=config['model']['num_heads'],
+            num_layers=config['model']['num_layers'],
+            patch_size=config['model']['patch_size'],
+            conv_kernel_size=config['model']['conv_kernel_size'],
+            dropout=config['model']['dropout'],
+            output_dim=len(targets_list)
+        )
     else:
         raise ValueError("Unknown model type")
     
@@ -178,18 +244,23 @@ def train(config_path="./Baseline/config.yaml"):
     best_val_loss = float('inf')
     # Early stopping configuration (defaults: patience=10, min_delta=1e-4, restore_best_weights=True)
     es_cfg = config.get('training', {}).get('early_stopping', {})
-    es_patience = es_cfg.get('patience', 15)
-    es_min_delta = es_cfg.get('min_delta', 1e-4)
+    es_patience = es_cfg.get('patience', 15) 
+    es_min_delta = float(es_cfg.get('min_delta', 1e-4))
     es_restore_best = es_cfg.get('restore_best_weights', True)
     epochs_no_improve = 0
     best_model_state = None
     print("\n--- Training Started ---")
 
+    epochs = config['training'].get(
+        'epochs',
+        config['model'].get('epochs', 50)
+    )
+
     # safe lookup for weights in case some targets are not present
     w_nu  = config['model']['loss_weights'].get('nu_max', 0.0)
     w_dnu = config['model']['loss_weights'].get('delta_nu', 0.0)
     
-    for epoch in range(config['model']['epochs']):
+    for epoch in range(epochs):
         model.train()
         total_train_loss = 0
         
@@ -217,7 +288,7 @@ def train(config_path="./Baseline/config.yaml"):
             
             # Print every 50 batches
             if i % 50 == 0:
-                print(f"  Epoch [{epoch+1}/{config['model']['epochs']}] | Batch [{i}/{len(train_loader)}] | Loss: {loss.item():.4f}")
+                print(f"  Epoch [{epoch+1}/{epochs}] | Batch [{i}/{len(train_loader)}] | Loss: {loss.item():.4f}")
 
         # Validation
         model.eval()
@@ -319,6 +390,7 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
     all_kics = []
 
     total_test_loss = 0
+    total_test_loss_by_target = {t: 0.0 for t in targets_list}
 
 
 
@@ -386,6 +458,7 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
 
                 loss_t = loss_fns[t](pred, truth)
                 loss += loss_weights[t] * loss_t                       
+                total_test_loss_by_target[t] += loss_t.item()
             total_test_loss += loss.item()
 
             for idx, t in enumerate(targets_list):
@@ -393,6 +466,10 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
                 all_truth[t].extend(y[:, idx].cpu().numpy())
             all_kics.extend(kic.numpy())
     avg_test_loss = total_test_loss / len(test_loader)
+    avg_test_loss_by_target = {
+        t: total_test_loss_by_target[t] / len(test_loader)
+        for t in targets_list
+    }
     
     cm = None
     if "class" in targets_list:
@@ -424,9 +501,19 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
         if t == "class":
             results_dict["truth_class"] = all_truth[t]
             results_dict["logits_class"] = all_preds[t]
+        elif t == "metallicity":
+            results_dict["truth_metallicity"] = all_truth[t]
+            results_dict["pred_metallicity"] = all_preds[t]
+            results_dict["residual_metallicity"] = (
+                np.asarray(all_preds[t]) - np.asarray(all_truth[t])
+            )
         else:
             results_dict[f"truth_log_{t}"] = all_truth[t]
             results_dict[f"pred_log_{t}"] = all_preds[t]
+            if t in ["nu_max", "delta_nu"]:
+                results_dict[f"residual_{t}"] = (
+                    np.asarray(all_preds[t]) - np.asarray(all_truth[t])
+                )
 
     results_df = pd.DataFrame(results_dict)
     if "class" in targets_list:
@@ -439,7 +526,7 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
     columns_needed = ['kic']
     if 'teff' in df.columns:
         columns_needed.append('teff')
-    for c in ['nu_max_hon', 'nu_max', 'nu_max_syd', 'nu_max_a2z', 'nu_max_dia', 'delta_nu', 'delta_nu_syd', 'delta_nu_a2z', 'delta_nu_dia']:
+    for c in ['nu_max_hon', 'nu_max', 'nu_max_syd', 'nu_max_a2z', 'nu_max_dia', 'delta_nu', 'delta_nu_syd', 'delta_nu_a2z', 'delta_nu_dia', 'metallicity']:
         if c in df.columns:
             columns_needed.append(c)
 
@@ -464,13 +551,10 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
     if 'delta_nu_dia' in merged.columns:
         merged['delta_nu_dia_log'] = np.log10(merged['delta_nu_dia'] + 1e-3)
 
-    # Residuals for model targets (only for targets present in targets_list)
-    for t in targets_list:
-        if t in ["nu_max", "delta_nu"]:
-            pred_col = f"pred_log_{t}"
-            truth_col = f"truth_log_{t}"
-            if pred_col in merged.columns and truth_col in merged.columns:
-                merged[f"residual_{t}"] = merged[pred_col] - merged[truth_col]
+    if "metallicity" in targets_list:
+        metallicity_mse = np.mean(merged["residual_metallicity"] ** 2)
+        metallicity_rmse = np.sqrt(metallicity_mse)
+        metallicity_mae = np.mean(np.abs(merged["residual_metallicity"]))
 
     # HON / SYD diagnostics only if their columns exist
     if 'hon_log' in merged.columns and 'truth_log_nu_max' in merged.columns:
@@ -665,6 +749,7 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
             f.write("CLASSIFICATION METRICS\n")
             f.write("="*70 + "\n\n")
 
+            f.write(f"Binary Cross Entropy: {avg_test_loss_by_target['class']:.6f}\n\n")
             f.write(f"Accuracy: {acc:.4f}\n\n")
 
             f.write("Confusion Matrix:\n")
@@ -672,6 +757,56 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
 
             f.write("Classification Report:\n")
             f.write(report + "\n")
+        if "metallicity" in targets_list:
+            f.write("\n" + "=" * 70 + "\n")
+            f.write("METALLICITY REGRESSION METRICS\n")
+            f.write("=" * 70 + "\n\n")
+            f.write("Reference: manifest metallicity (raw units)\n")
+            metallicity_loss_name = config["model"]["loss_functions"]["metallicity"]
+            f.write(
+                f"{metallicity_loss_name.upper()} loss: "
+                f"{avg_test_loss_by_target['metallicity']:.6f}\n"
+            )
+            f.write(f"MAE: {metallicity_mae:.6f}\n")
+            f.write(f"MSE: {metallicity_mse:.6f}\n")
+            f.write(f"RMSE: {metallicity_rmse:.6f}\n")
+            f.write(f"Test samples: {len(merged)}\n")
+    if "metallicity" in targets_list:
+        truth = merged["truth_metallicity"]
+        prediction = merged["pred_metallicity"]
+        min_value = min(truth.min(), prediction.min())
+        max_value = max(truth.max(), prediction.max())
+
+        plt.figure(figsize=(8, 7))
+        plt.scatter(truth, prediction, alpha=0.5, s=12, label="Model")
+        plt.plot([min_value, max_value], [min_value, max_value], "r--", label="Perfect prediction")
+        plt.xlabel("Reference metallicity")
+        plt.ylabel("Predicted metallicity")
+        plt.title("Metallicity: reference vs prediction")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.savefig(f"{exp_dir}/metallicity_performance.png", dpi=150, bbox_inches="tight")
+        plt.close()
+
+        plt.figure(figsize=(8, 6))
+        plt.scatter(truth, merged["residual_metallicity"], alpha=0.5, s=12)
+        plt.axhline(0, color="black", linestyle="--", linewidth=1)
+        plt.xlabel("Reference metallicity")
+        plt.ylabel("Residual (prediction - reference)")
+        plt.title("Metallicity residuals")
+        plt.grid(True, alpha=0.3)
+        plt.savefig(f"{exp_dir}/metallicity_residuals.png", dpi=150, bbox_inches="tight")
+        plt.close()
+
+        plt.figure(figsize=(8, 6))
+        plt.hist(merged["residual_metallicity"], bins=40, alpha=0.75)
+        plt.xlabel("Residual (prediction - reference)")
+        plt.ylabel("Count")
+        plt.title("Metallicity residual distribution")
+        plt.grid(True, alpha=0.3, axis="y")
+        plt.savefig(f"{exp_dir}/metallicity_residual_hist.png", dpi=150, bbox_inches="tight")
+        plt.close()
+
     if "nu_max" in targets_list:
         savepath1 = f"{exp_dir}/performance_plot.png"
         min_val=merged['truth_log_nu_max'].min()

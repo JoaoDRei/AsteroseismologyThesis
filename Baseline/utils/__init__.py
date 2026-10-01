@@ -1,1 +1,3 @@
 from .dataset import AstroBaselineDataset
+from .synthetic_dataset import SyntheticPSDPeakDataset
+from reconstruction_dataset import AstroReconstructionDataset
