@@ -6,8 +6,8 @@ import numpy as np
 def create_manifest(processed_dir, catalog_path,hon_path, general_catalog_path, output_csv="./Baseline/manifest.csv"):
     # 1. Load the APOKASC catalog
     # Adjust names/colspecs based on your specific table4APOKASC.txt format
-    names = ['KIC', 'EvolState', 'nu_max', 'delta_nu', 'Teff']
-    colspecs = [(0, 8), (9,16),(49, 59), (71, 81), (192,202)] # positions for KIC and nu_max
+    names = ['KIC', 'EvolState', 'nu_max', 'delta_nu', 'Teff', 'metallicity']
+    colspecs = [(0, 8), (9,16),(49, 59), (71, 81), (192,202), (236, 246)] # positions for KIC and nu_max
     catalog = pd.read_fwf(catalog_path, colspecs=colspecs, names=names, skiprows=111)
     catalog = catalog.dropna(subset=['nu_max']) # Remove entries without nu_max
     catalog['KIC'] = catalog['KIC'].astype(int) # Ensure KIC is integer for matching
@@ -65,6 +65,7 @@ def create_manifest(processed_dir, catalog_path,hon_path, general_catalog_path, 
                 deltanu_a2z=match.iloc[0]['delta_nu_a2z']
                 numax_dia=match.iloc[0]['nu_max_dia']
                 deltanu_dia=match.iloc[0]['delta_nu_dia']
+                metallicity=match.iloc[0]['metallicity']
                 if os.path.exists(psd_path):
                     data_list.append({
                         'kic': kic_id,
@@ -81,7 +82,8 @@ def create_manifest(processed_dir, catalog_path,hon_path, general_catalog_path, 
                         'delta_nu_a2z': deltanu_a2z,
                         'nu_max_dia': numax_dia,
                         'delta_nu_dia': deltanu_dia,
-                        'teff': teff 
+                        'teff': teff,
+                        'metallicity': metallicity
                     })
         except:
             continue

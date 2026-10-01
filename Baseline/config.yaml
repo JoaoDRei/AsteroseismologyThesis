@@ -1,7 +1,7 @@
 
 data:
   manifest_path: "./Baseline/manifest.csv"
-  sample_size: null # Set to null (full sample - around 10k) or a number
+  sample_size: 1000 # Set to null (full sample - around 10k) or a number
   mode: "lc" #lc light curve, psd for power spectrum
   target_length: null #if null, assumes 65000 for lc mode, 35000 for psd mode. If a value, assumes that value
   batch_size: 64
@@ -9,11 +9,35 @@ data:
   filter_duration: "80d"  #"20d", "55d" or "80d" Or null to use all files
   seq_length: 128  # Only used for transformer model, ignored otherwise
   
+training:
+  split_method: "holdout"   # "holdout" or "cross_validation"  # NOTE:
+  # cross_validate.py is a separate script, so this setting
+  # is mainly retained for compatibility/documentation.
+  n_folds: 5
+  seed: 42
+  epochs: 50 #originally 50
+  early_stopping:
+    patience: 15
+    min_delta: 0.0001
+    restore_best_weights: true
+
+
 
 model:
-  type: "cnn" # cnn, mlp, transformer
+  type: "cnn" # cnn, mlp, transformer, resnet1d, mobilenet1d, cnnlstm, cnnlstmbidirectional, astroconformer, astroconformer_v2
+
+  #######################
+  #for the conformer models:
+  encoder_dim: 128
+  num_heads: 8
+  num_layers: 4
+  patch_size: 64
+  conv_kernel_size: 31
+  dropout: 0.1
   learning_rate: 0.0005
-  epochs: 50 #originally 50
+  #######################
+
+
   loss_functions:  
     nu_max: "huber" # mse, l1, huber
     delta_nu: "huber" # mse, l1, huber
