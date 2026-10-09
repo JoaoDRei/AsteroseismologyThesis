@@ -1,0 +1,11 @@
+processed_ml_data_APOKASC3/
+Baseline/results/
+Baseline/__pycache__/
+Baseline/benchmark_cache/
+Baseline/manifest_80d_plots
+Baseline/benchmark_catalogue_hits.csv
+Baseline/benchmark_references.csv
+Baseline/benchmark_stars.csv
+Baseline/manifest.csv
+Baseline/models/__pycache__/
+Baseline/utils/__pycache__/

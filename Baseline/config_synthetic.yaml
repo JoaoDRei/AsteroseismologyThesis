@@ -1,0 +1,34 @@
+data:
+  manifest_path: null          # not used
+  sample_size: null            # not used
+  mode: "psd"                  # still fine (just a label now)
+  target_length: 1024          # IMPORTANT: must be set (no None!)
+  batch_size: 64
+  num_workers: 0               # keep simple for debugging
+  filter_duration: null
+  seq_length: 128
+
+model:
+  type: "cnn"
+  learning_rate: 0.001
+  epochs: 20
+
+  loss_functions:
+    peak_loc: "mse"
+
+  loss_weights:
+    peak_loc: 1.0
+
+  targets: ["peak_loc"]   # 🚨 synthetic target
+
+paths:
+  checkpoint_dir: "./results/checkpoints_synth"
+
+interpretability:
+  method: "ig"   # "ig" or "smoothgrad"
+  smoothgrad:
+    n_samples: 50
+    noise_std: 0.02
+
+debug:
+  synthetic: true
