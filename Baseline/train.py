@@ -1102,27 +1102,27 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
         print(f"📈 Confusion matrix saved to: {exp_dir}/confusion_matrix.png")
 
     metrics = {
-    "test_loss": float(avg_test_loss)
+        "test_loss": float(avg_test_loss)
     }
 
     if "nu_max" in targets_list:
-    metrics.update({
+        metrics.update({
         "nu_max_mse": float(model_nu_mse),
         "nu_max_rmse": float(model_nu_rmse),
     })
     if "delta_nu" in targets_list:
-    metrics.update({
+        metrics.update({
         "delta_nu_mse": float(model_dnu_mse),
         "delta_nu_rmse": float(model_dnu_rmse),
     })
     if "class" in targets_list:
-    from sklearn.metrics import (
-        accuracy_score,
-        balanced_accuracy_score,
-        precision_score,
-        recall_score,
-        f1_score
-    )
+        from sklearn.metrics import (
+            accuracy_score,
+            balanced_accuracy_score,
+            precision_score,
+            recall_score,
+            f1_score
+        )
 
     metrics.update({
         "class_accuracy": float(acc),
