@@ -9,7 +9,7 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import minimize
 
 
-def plot_comprehensive_diagnostic(kic_id, base_dir="./kepseismic_data_APOKASC3", proc_dir="./processed_ml_data_APOKASC3", catalog_path="./table4APOKASC.txt", filter_type="80d"):
+def plot_comprehensive_diagnostic(kic_id, base_dir="../kepseismic_data_APOKASC3", proc_dir="./processed_ml_data_APOKASC3", catalog_path="./table4APOKASC.txt", filter_type="80d"):
     kic_padded = str(int(kic_id)).zfill(9)
 
     # --- 1. Load Official Catalog Values using Fixed-Width Specs ---

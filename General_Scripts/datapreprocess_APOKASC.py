@@ -13,9 +13,9 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # --- Configuration ---
 # This path matches where your download script saves the data
-raw_data_root = "./kepseismic_data_APOKASC3/mastDownload/HLSP"
-processed_dir = "./processed_ml_data_APOKASC3"
-catalog_path = "./table4APOKASC.txt"
+raw_data_root = "../kepseismic_data_APOKASC3/mastDownload/HLSP"
+processed_dir = "../processed_ml_data_APOKASC3"
+catalog_path = "../table4APOKASC.txt"
 
 os.makedirs(processed_dir, exist_ok=True)
 

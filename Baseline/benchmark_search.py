@@ -17,9 +17,9 @@ Main strategy
        KIC + SIMBAD main_id + selected aliases
 8. Classify the returned papers conservatively.
 9. Write:
-       Baseline/benchmark_stars.csv
-       Baseline/benchmark_references.csv
-       Baseline/benchmark_catalogue_hits.csv
+       Baseline/results/benchmark/benchmark_stars.csv
+       Baseline/results/benchmark/benchmark_references.csv
+       Baseline/results/benchmark/benchmark_catalogue_hits.csv
 
 Usage
 -----
@@ -258,11 +258,11 @@ BASELINE_DIR = Path("Baseline")
 
 MANIFEST_PATH = BASELINE_DIR / "manifest.csv"
 
-STARS_OUTPUT = BASELINE_DIR / "benchmark_stars.csv"
-REFERENCES_OUTPUT = BASELINE_DIR / "benchmark_references.csv"
-CATALOGUE_OUTPUT = BASELINE_DIR / "benchmark_catalogue_hits.csv"
+STARS_OUTPUT = BASELINE_DIR / "results" / "benchmark" / "benchmark_stars.csv"
+REFERENCES_OUTPUT = BASELINE_DIR / "results" / "benchmark" / "benchmark_references.csv"
+CATALOGUE_OUTPUT = BASELINE_DIR / "results" / "benchmark" / "benchmark_catalogue_hits.csv"
 
-CACHE_DIR = BASELINE_DIR / "benchmark_cache"
+CACHE_DIR = BASELINE_DIR / "results" / "benchmark" / "benchmark_cache"
 ADS_CACHE_DIR = CACHE_DIR / "ads"
 SIMBAD_CACHE_DIR = CACHE_DIR / "simbad"
 VIZIER_CACHE_DIR = CACHE_DIR / "vizier"

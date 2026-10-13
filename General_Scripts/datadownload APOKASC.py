@@ -4,7 +4,7 @@ import time
 import os
 
 # --- 1. Setup ---
-base_download_dir = "./kepseismic_data_APOKASC3"
+base_download_dir = "../kepseismic_data_APOKASC3" 
 # Ensure the file name matches your downloaded APOKASC-3 file
 file_path = "./table4APOKASC.txt" 
 
