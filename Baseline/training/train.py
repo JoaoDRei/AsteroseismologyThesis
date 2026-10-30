@@ -7,8 +7,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Subset
-from utils import AstroBaselineDataset, SyntheticPSDPeakDataset
-from models import SimpleMLP, SimpleCNN, SimpleTransformer, MobileNet1D, ResNet1D, CNNLSTM, AstroConformer, AstroConformerV2, CNNBiLSTMEncoder, CNNBiLSTM
 import datetime
 import shutil
 import seaborn as sns
@@ -16,6 +14,17 @@ from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 import random
 import json
 import time
+import inspect
+from pathlib import Path
+from Baseline.paths import BASELINE_DIR, PROJECT_ROOT
+from Baseline.utils import AstroBaselineDataset, SyntheticPSDPeakDataset
+from Baseline.models import SimpleMLP, SimpleCNN, SimpleTransformer, MobileNet1D, ResNet1D, CNNLSTM, AstroConformer, AstroConformerV2, CNNBiLSTMEncoder, CNNBiLSTM
+
+
+def resolve_project_path(path):
+    path = Path(path).expanduser()
+    return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
+
 
 def set_seed(seed):
     random.seed(seed)
@@ -30,15 +39,17 @@ def set_seed(seed):
 
 
 
-def train(config_path="./Baseline/config.yaml"):
+def train(config_path=BASELINE_DIR / "config.yaml"):
     # 1. Load Configuration
+    config_path = resolve_project_path(config_path)
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
 
     seed = config["training"]["seed"]
     set_seed(seed)
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
     #setting up experiment directory
     model_type = config["model"]["type"]
@@ -58,7 +69,7 @@ def train(config_path="./Baseline/config.yaml"):
         f"_{targets_name}"
         f"_{timestamp}"
     )
-    exp_dir = os.path.join("./Baseline/results", exp_name)
+    exp_dir = str(BASELINE_DIR / "results" / exp_name)
     os.makedirs(exp_dir, exist_ok=True)
 
     print(f"\n📁 Experiment directory: {exp_dir}")
@@ -116,23 +127,24 @@ def train(config_path="./Baseline/config.yaml"):
     }
     loss_weights = config['model']['loss_weights']
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"\n🚀 Starting training on device: {device}")
 
-    checkpoint_dir = config['paths']['checkpoint_dir']
+    checkpoint_root = resolve_project_path(config['paths']['checkpoint_dir'])
+    checkpoint_dir = checkpoint_root / exp_name
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     checkpoint_name = config['paths'].get('checkpoint_name')
     if checkpoint_name is None:
         target_key = "_".join(targets_list)
         checkpoint_name = f"best_model_{config['model']['type']}_{target_key}.pth"
-    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
+    checkpoint_path = checkpoint_dir / checkpoint_name
 
     
     # 2. Data Loading & Splitting
     if not synthetic:
-        print(f"📂 Loading manifest from {config['data']['manifest_path']}...")
-        df = pd.read_csv(config['data']['manifest_path'])
+        manifest_path = resolve_project_path(config['data']['manifest_path'])
+        print(f"📂 Loading manifest from {manifest_path}...")
+        df = pd.read_csv(manifest_path)
         if "class" in config["model"]["targets"]:
 
             def normalize_ev(v):
@@ -208,18 +220,21 @@ def train(config_path="./Baseline/config.yaml"):
     else:
         train_ds = AstroBaselineDataset(
             train_df,
+            targets=config['model']['targets'],
             mode=config['data']['mode'],
             target_length=config['data']['target_length'],
             deterministic=False
         )
         val_ds = AstroBaselineDataset(
             val_df,
+            targets=config['model']['targets'],
             mode=config['data']['mode'],
             target_length=config['data']['target_length'],
             deterministic=True
         )
         test_ds = AstroBaselineDataset(
             test_df,
+            targets=config['model']['targets'],
             mode=config['data']['mode'],
             target_length=config['data']['target_length'],
             deterministic=True
@@ -270,7 +285,7 @@ def train(config_path="./Baseline/config.yaml"):
             encoder_dim=config['model']['encoder_dim'],
             num_heads=config['model']['num_heads'],
             num_layers=config['model']['num_layers'],
-            patch_size=config['model']['patch_size'],
+            stride=config['model']['patch_size'],
             conv_kernel_size=config['model']['conv_kernel_size'],
             dropout=config['model']['dropout'],
             output_dim=len(targets_list)
@@ -418,7 +433,10 @@ def train(config_path="./Baseline/config.yaml"):
                     model.load_state_dict(restore_state)
                     # save restored (device) model as CPU state dict for consistency
                     torch.save({k: v.cpu() for k, v in model.state_dict().items()}, checkpoint_path)
-                    torch.save({k: v.cpu() for k, v in model.state_dict().items()}, os.path.join(config['paths']['checkpoint_dir'], 'best_model.pth'))
+                    torch.save(
+                        {k: v.cpu() for k, v in model.state_dict().items()},
+                        checkpoint_root / "best_model.pth",
+                    )
                     print("🔁 Restored best model weights and saved checkpoint.")
                 break
 
@@ -444,8 +462,12 @@ def train(config_path="./Baseline/config.yaml"):
 
     # 5. Final Evaluation
     print("\n--- Final Evaluation on Test Set ---")
-    model.load_state_dict(torch.load(checkpoint_path))   
-    evaluate_model(model, test_loader, device, config, config['data']['manifest_path'], test_idx, checkpoint_path, exp_dir  )
+    model.load_state_dict(torch.load(checkpoint_path))
+    evaluate_model(
+        model, test_loader, device, config,
+        resolve_project_path(config['data']['manifest_path']),
+        test_idx, checkpoint_path, exp_dir
+    )
 
 
 
@@ -520,8 +542,12 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
 
     
     # copy the model architecture file into the folder as well for reproducibility
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    model_source_file = os.path.join(base_dir, "models", f"{config['model']['type']}.py")
+    base_dir = str(BASELINE_DIR)
+    model_source_file = inspect.getsourcefile(type(model))
+    if model_source_file is None or not os.path.isfile(model_source_file):
+        raise FileNotFoundError(
+            f"Could not locate source for model {type(model).__name__}"
+        )
     shutil.copy(model_source_file, f"{exp_dir}/model_architecture.py")
     #copy the best model checkpoint into the folder as well
     shutil.copy(checkpoint_path, f"{exp_dir}/best_model.pth")
@@ -1124,47 +1150,47 @@ def evaluate_model(model, test_loader, device, config, manifest_path, test_idx, 
             f1_score
         )
 
-    metrics.update({
-        "class_accuracy": float(acc),
-        "class_balanced_accuracy": float(
-            balanced_accuracy_score(truth_class, preds_class)
-        ),
-        "class_precision": float(
-            precision_score(truth_class, preds_class, zero_division=0)
-        ),
-        "class_recall": float(
-            recall_score(truth_class, preds_class, zero_division=0)
-        ),
-        "class_f1": float(
-            f1_score(truth_class, preds_class, zero_division=0)
-        )
-    })
+        metrics.update({
+            "class_accuracy": float(acc),
+            "class_balanced_accuracy": float(
+                balanced_accuracy_score(truth_class, preds_class)
+            ),
+            "class_precision": float(
+                precision_score(truth_class, preds_class, zero_division=0)
+            ),
+            "class_recall": float(
+                recall_score(truth_class, preds_class, zero_division=0)
+            ),
+            "class_f1": float(
+                f1_score(truth_class, preds_class, zero_division=0)
+            )
+        })
     if "metallicity" in targets_list:
-    metrics.update({
-        "metallicity_mae": float(metallicity_mae),
-        "metallicity_mse": float(metallicity_mse),
-        "metallicity_rmse": float(metallicity_rmse)
-    })
+        metrics.update({
+            "metallicity_mae": float(metallicity_mae),
+            "metallicity_mse": float(metallicity_mse),
+            "metallicity_rmse": float(metallicity_rmse)
+        })
     with open(os.path.join(exp_dir, "metrics.json"), "w") as f:
-    json.dump(metrics, f, indent=4)
+        json.dump(metrics, f, indent=4)
 
     experiment_record = {
-    "experiment": os.path.basename(exp_dir),
-    "model": config["model"]["type"],
-    "input": config["data"]["mode"],
-    "duration": config["data"].get("filter_duration"),
-    "targets": "+".join(targets_list),
-    "seed": config["training"]["seed"],
-    "num_parameters": sum(
-        p.numel() for p in model.parameters()
-        if p.requires_grad
-    ),
-    "test_loss": float(avg_test_loss)
+        "experiment": os.path.basename(exp_dir),
+        "model": config["model"]["type"],
+        "input": config["data"]["mode"],
+        "duration": config["data"].get("filter_duration"),
+        "targets": "+".join(targets_list),
+        "seed": config["training"]["seed"],
+        "num_parameters": sum(
+            p.numel() for p in model.parameters()
+            if p.requires_grad
+        ),
+        "test_loss": float(avg_test_loss)
     }
 
     experiment_record.update(metrics)
 
-    experiments_csv = "./Baseline/results/experiments.csv"
+    experiments_csv = BASELINE_DIR / "results" / "experiments.csv"
 
     if os.path.exists(experiments_csv):
         experiments_df = pd.read_csv(experiments_csv)
@@ -1182,7 +1208,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="./Baseline/config.yaml", help="Path to config yaml")
+    parser.add_argument("--config", type=str, default=str(BASELINE_DIR / "config.yaml"), help="Path to config yaml")
     args = parser.parse_args()
 
     train(config_path=args.config)

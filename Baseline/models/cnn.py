@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
 import yaml
+from Baseline.paths import BASELINE_DIR
 
 class SimpleCNN(nn.Module):
     def __init__(self, output_dim=None):
         super().__init__()
         if output_dim is None:
             import yaml
-            with open("./Baseline/config.yaml", "r") as f:
+            with (BASELINE_DIR / "config.yaml").open("r") as f:
                 config = yaml.safe_load(f)
             output_dim = len(config['model']['targets'])
         self.features = nn.Sequential(

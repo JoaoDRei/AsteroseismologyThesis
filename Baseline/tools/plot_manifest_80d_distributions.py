@@ -5,6 +5,7 @@ from pathlib import Path
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
+from Baseline.paths import BASELINE_DIR
 
 
 def parse_args():
@@ -13,12 +14,12 @@ def parse_args():
     )
     parser.add_argument(
         "--input",
-        default=Path(__file__).with_name("manifest.csv"),
+        default=BASELINE_DIR / "manifest.csv",
         help="Path to manifest.csv file.",
     )
     parser.add_argument(
         "--output-dir",
-        default=Path(__file__).with_name("manifest_80d_plots"),
+        default=BASELINE_DIR / "manifest_80d_plots",
         help="Directory where individual plot images will be saved.",
     )
     parser.add_argument(

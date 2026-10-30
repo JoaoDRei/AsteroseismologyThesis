@@ -71,25 +71,35 @@ interpretability:
 debug:  
   synthetic: false  #true or false. If true, uses a synthetic dataset instead of the real one. Useful for testing and debugging.
 
+
 autoencoder:
-  enabled: false
+  input_length: 65000
+  reconstruction_length: 4096
+
+  batch_size: 16
+  num_workers: 0
 
   hidden_size: 128
   num_layers: 2
 
-  reconstruction_length: 4096
-
-  learning_rate: 0.0005
-
-  loss: "mse"
-
-  epochs: 50
-
-  batch_size: 32
-  num_workers: 4
-
-  early_stopping:
-    patience: 10
-    min_delta: 1e-4
+  learning_rate: 0.001
+  weight_decay: 0.0
+  epochs: 100
 
   checkpoint_name: "cnn_bilstm_autoencoder_best.pth"
+  output_dir: ./Baseline/results
+  num_reconstruction_examples: 8
+
+  split:
+    train: 0.8
+    validation: 0.1
+    test: 0.1
+
+  scheduler:
+    factor: 0.5
+    patience: 5
+    min_lr: 0.0000001
+
+  early_stopping:
+    patience: 15
+    min_delta: 0.0001

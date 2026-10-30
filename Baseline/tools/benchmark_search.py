@@ -25,35 +25,35 @@ Usage
 -----
 Run the default search:
 
-    python benchmark_search.py
+    python -m Baseline.tools.benchmark_search
 
 Search ADS for only 1000 candidates:
 
-    python benchmark_search.py --ads-candidates 1000
+    python -m Baseline.tools.benchmark_search --ads-candidates 1000
 
 Search ADS for 2000:
 
-    python benchmark_search.py --ads-candidates 2000
+    python -m Baseline.tools.benchmark_search --ads-candidates 2000
 
 Skip ADS entirely:
 
-    python benchmark_search.py --ads-candidates 0
+    python -m Baseline.tools.benchmark_search --ads-candidates 0
 
 Search ADS for every star:
 
-    python benchmark_search.py --ads-candidates -1
+    python -m Baseline.tools.benchmark_search --ads-candidates -1
 
 Force fresh ADS/SIMBAD/VizieR queries:
 
-    python benchmark_search.py --refresh-cache
+    python -m Baseline.tools.benchmark_search --refresh-cache
 
 Use more ADS workers:
 
-    python benchmark_search.py --ads-candidates 1000 --ads-workers 4
+    python -m Baseline.tools.benchmark_search --ads-candidates 1000 --ads-workers 4
 
 Limit the number of stars for a test run:
 
-    python benchmark_search.py --max-stars 100
+    python -m Baseline.tools.benchmark_search --max-stars 100
 
 Environment
 -----------
@@ -90,6 +90,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 import requests
+from Baseline.paths import BASELINE_DIR
 
 from astroquery.simbad import Simbad
 from astroquery.vizier import Vizier
@@ -253,8 +254,6 @@ from astroquery.vizier import Vizier
 # =============================================================================
 # Paths
 # =============================================================================
-
-BASELINE_DIR = Path("Baseline")
 
 MANIFEST_PATH = BASELINE_DIR / "manifest.csv"
 

@@ -2,18 +2,21 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-import yaml
 
 class AstroBaselineDataset(Dataset):
-    def __init__(self, manifest_df, mode='lc', target_length=None, deterministic=False):
+    def __init__(
+        self,
+        manifest_df,
+        targets,
+        mode='lc',
+        target_length=None,
+        deterministic=False,
+    ):
         self.df = manifest_df
         self.mode = mode
         self.target_length = target_length or (65000 if mode == 'lc' else 35000)
         self.deterministic = deterministic
-        with open("./Baseline/config.yaml", "r") as f:
-                config = yaml.safe_load(f)
-
-        self.config_targets = config['model']['targets']
+        self.config_targets = targets
         self.class_map = {"RGB": 0, "RC": 1}
 
 
