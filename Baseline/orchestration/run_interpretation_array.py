@@ -7,6 +7,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
+
 from Baseline.paths import BASELINE_DIR, PROJECT_ROOT
 
 ROOT = PROJECT_ROOT
@@ -28,6 +30,40 @@ def write_status(path, data):
 def resolve_path(value):
     path = Path(value)
     return path if path.is_absolute() else ROOT / path
+
+
+def has_complete_attribution_outputs(output_dir, method):
+    if method not in {"ig", "smoothgrad", "smoothgrad_ig"} or not output_dir.is_dir():
+        return False
+    map_paths = list(output_dir.glob(f"kic_*_{method}.png"))
+    if not map_paths:
+        return False
+
+    required_metadata = {"sample_id", "duration", "nu_max"}
+    for path in map_paths:
+        attribution_path = output_dir / f"{path.stem}.npz"
+        if not attribution_path.is_file():
+            return False
+
+        try:
+            with np.load(attribution_path, allow_pickle=False) as data:
+                metadata = json.loads(str(data["metadata"].item()))
+        except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+            print(
+                f"WARNING: Attribution output is incomplete; "
+                f"will regenerate {attribution_path}: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return False
+
+        if not isinstance(metadata, dict) or (
+            metadata.get("method") != method
+            or not required_metadata.issubset(metadata)
+        ):
+            return False
+
+    return True
 
 
 def archive_current_slurm_logs(task_id):
@@ -142,7 +178,13 @@ def main():
     job = jobs[index]
     analysis_id = job["analysis_id"]
     run_dir = resolve_path(job["run_dir"])
-    output_dir = run_dir / "interpretability"
+    output_dir_value = (job.get("output_dir") or "").strip()
+    output_dir = (
+        resolve_path(output_dir_value)
+        if output_dir_value
+        else run_dir / "interpretability"
+    )
+    method = (job.get("method") or "").strip().lower()
     status_path = (
         ROOT / "Baseline/interpretation/status" /
         f"{analysis_id}.json"
@@ -181,7 +223,10 @@ def main():
     # Do not skip a previous failure, but avoid duplicate completed jobs.
     if status_path.exists():
         previous = json.loads(status_path.read_text())
-        if previous.get("status") == "completed":
+        if (
+            previous.get("status") == "completed"
+            and has_complete_attribution_outputs(output_dir, method)
+        ):
             print("Already completed; skipping.", flush=True)
             archive_current_slurm_logs(index)
             return
@@ -207,7 +252,6 @@ def main():
         "--output-dir", str(output_dir),
     ]
 
-    method = (job.get("method") or "").strip().lower()
     if method:
         command.extend(["--method", method])
 

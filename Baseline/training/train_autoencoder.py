@@ -8,8 +8,8 @@ AstroReconstructionDataset(df, target_length=..., reconstruction_length=...,
                            deterministic=...)
     returns (input, reconstruction_target, kic)
 
-CNNBiLSTMAutoencoder(hidden_size=..., num_layers=...,
-                     reconstruction_length=...)
+build_autoencoder(architecture=..., hidden_size=..., num_layers=...,
+                  reconstruction_length=..., latent_dim=...)
     returns (reconstruction, embedding)
 
 Outputs
@@ -47,7 +47,7 @@ import yaml
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 
-from Baseline.models import CNNBiLSTMAutoencoder
+from Baseline.models import build_autoencoder
 from Baseline.paths import BASELINE_DIR, PROJECT_ROOT
 from Baseline.utils.reconstruction_dataset import AstroReconstructionDataset
 
@@ -122,6 +122,21 @@ def resolve_path(path, config_path):
     return (PROJECT_ROOT / path).resolve()
 
 
+def create_experiment_directory(output_root, created_at=None):
+    timestamp = (created_at or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    suffix = 0
+    while True:
+        experiment_name = f"autoencoder_{timestamp}"
+        if suffix:
+            experiment_name += f"_{suffix:03d}"
+        experiment_dir = output_root / experiment_name
+        try:
+            experiment_dir.mkdir(parents=True, exist_ok=False)
+            return experiment_name, experiment_dir
+        except FileExistsError:
+            suffix += 1
+
+
 def get_settings(config):
     acfg = config.get("autoencoder", {})
     dcfg = config.get("data", {})
@@ -180,9 +195,19 @@ def get_settings(config):
 
     if learning_rate <= 0:
         raise ValueError("Learning rate must be positive.")
+    if int(acfg.get("latent_dim", 2 * int(acfg["hidden_size"]))) <= 0:
+        raise ValueError("autoencoder.latent_dim must be positive.")
+    architecture = acfg.get("architecture", "cnn_bilstm")
+    if architecture not in {"cnn_bilstm", "convolutional", "fully_connected"}:
+        raise ValueError(
+            "autoencoder.architecture must be one of "
+            "'cnn_bilstm', 'convolutional', or 'fully_connected'."
+        )
+    split_seed = int(acfg.get("split_seed", seed))
 
     return {
         "seed": seed,
+        "split_seed": split_seed,
         "input_length": input_length,
         "reconstruction_length": reconstruction_length,
         "batch_size": batch_size,
@@ -200,6 +225,20 @@ def get_settings(config):
         "test_fraction": test_fraction,
         "hidden_size": int(acfg["hidden_size"]),
         "num_layers": int(acfg["num_layers"]),
+        "latent_dim": int(
+            acfg.get("latent_dim", 2 * int(acfg["hidden_size"]))
+        ),
+        "architecture": architecture,
+        "pooled_input": bool(acfg.get("pooled_input", False)),
+        "preserve_short_sequences": bool(
+            acfg.get("preserve_short_sequences", False)
+        ),
+        "comparison_group": acfg.get("comparison_group"),
+        "model_type": {
+            "cnn_bilstm": "CNNBiLSTMAutoencoder",
+            "convolutional": "ConvolutionalAutoencoder",
+            "fully_connected": "FullyConnectedAutoencoder",
+        }[architecture],
         "checkpoint_name": acfg.get("checkpoint_name", "best_model.pth"),
         "output_dir": acfg.get(
             "output_dir",
@@ -292,7 +331,7 @@ def prepare_manifest(config, settings):
 def split_by_kic(df, settings):
     """Split unique stars, then construct row partitions by KIC."""
     kics = np.asarray(sorted(df["kic"].unique()))
-    seed = settings["seed"]
+    seed = settings["split_seed"]
 
     train_fraction = settings["train_fraction"]
     val_fraction = settings["val_fraction"]
@@ -355,7 +394,8 @@ def make_dataset(df, settings, deterministic):
         df,
         target_length=settings["input_length"],
         reconstruction_length=settings["reconstruction_length"],
-        deterministic=deterministic
+        deterministic=deterministic,
+        pooled_input=settings["pooled_input"],
     )
 
 
@@ -380,10 +420,13 @@ def make_loader(dataset, settings, shuffle, seed):
 # ============================================================
 
 def build_model(settings, device):
-    model = CNNBiLSTMAutoencoder(
+    model = build_autoencoder(
+        architecture=settings["architecture"],
         hidden_size=settings["hidden_size"],
         num_layers=settings["num_layers"],
-        reconstruction_length=settings["reconstruction_length"]
+        latent_dim=settings["latent_dim"],
+        reconstruction_length=settings["reconstruction_length"],
+        preserve_short_sequences=settings["preserve_short_sequences"],
     )
 
     return model.to(device)
@@ -415,7 +458,7 @@ def forward_model(model, x, target):
 
     if not isinstance(result, (tuple, list)) or len(result) != 2:
         raise ValueError(
-            "CNNBiLSTMAutoencoder must return "
+            "Autoencoder must return "
             "(reconstruction, embedding)."
         )
 
@@ -427,7 +470,7 @@ def forward_model(model, x, target):
             f"output={tuple(reconstruction.shape)}, "
             f"target={tuple(target.shape)}. "
             "Check AstroReconstructionDataset and "
-            "CNNBiLSTMAutoencoder output dimensions."
+            "Autoencoder output dimensions."
         )
 
     if not torch.isfinite(reconstruction).all():
@@ -787,6 +830,10 @@ def train_autoencoder(config_path):
         "Settings: "
         f"input_length={settings['input_length']}, "
         f"reconstruction_length={settings['reconstruction_length']}, "
+        f"input_representation="
+        f"{'pooled reconstruction grid' if settings['pooled_input'] else 'raw crop'}, "
+        f"preserve_short_sequences={settings['preserve_short_sequences']}, "
+        f"latent_dim={settings['latent_dim']}, "
         f"batch_size={settings['batch_size']}, "
         f"epochs={settings['epochs']}, "
         f"workers={settings['num_workers']}",
@@ -803,10 +850,7 @@ def train_autoencoder(config_path):
     )
     output_root.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_name = f"autoencoder_{timestamp}"
-    experiment_dir = output_root / experiment_name
-    experiment_dir.mkdir(parents=True, exist_ok=False)
+    experiment_name, experiment_dir = create_experiment_directory(output_root)
     print(f"Experiment output directory: {experiment_dir}", flush=True)
 
     reconstruction_dir = experiment_dir / "reconstruction_examples"
@@ -974,11 +1018,16 @@ def train_autoencoder(config_path):
                     "optimizer_state_dict": optimizer.state_dict(),
                     "config": saved_config,
                     "seed": settings["seed"],
+                    "split_seed": settings["split_seed"],
                     "epoch": epoch,
                     "best_val_loss": best_val_loss,
-                    "model_type": "CNNBiLSTMAutoencoder",
+                    "model_type": settings["architecture"],
                     "input_length": settings["input_length"],
                     "reconstruction_length": settings["reconstruction_length"],
+                    "latent_dim": settings["latent_dim"],
+                    "preserve_short_sequences": (
+                        settings["preserve_short_sequences"]
+                    ),
                 },
                 checkpoint_path
             )
@@ -1136,7 +1185,17 @@ def train_autoencoder(config_path):
 
     metrics = {
         "experiment_name": experiment_name,
-        "model_type": "CNNBiLSTMAutoencoder",
+        "model_type": settings["model_type"],
+        "architecture": settings["architecture"],
+        "latent_dim": settings["latent_dim"],
+        "seed": settings["seed"],
+        "split_seed": settings["split_seed"],
+        "pooled_input": settings["pooled_input"],
+        "preserve_short_sequences": settings["preserve_short_sequences"],
+        "comparison_group": settings["comparison_group"],
+        "parameter_count": sum(
+            parameter.numel() for parameter in model.parameters()
+        ),
         "manifest_path": manifest_path,
         "best_epoch": int(best_epoch),
         "best_validation_mse": float(best_val_loss),
@@ -1163,7 +1222,7 @@ def train_autoencoder(config_path):
         f.write("AUTOENCODER EVALUATION\n")
         f.write("=" * 60 + "\n\n")
         f.write(f"Experiment: {experiment_name}\n")
-        f.write(f"Model: CNNBiLSTMAutoencoder\n")
+        f.write(f"Model: {settings['architecture']}\n")
         f.write(f"Best epoch: {best_epoch}\n")
         f.write(f"Best validation MSE: {best_val_loss:.8f}\n")
         f.write(f"Test MSE: {test_metrics['mse']:.8f}\n")
@@ -1198,9 +1257,18 @@ def train_autoencoder(config_path):
         "checkpoint_path": str(checkpoint_path.resolve()),
         "device": str(device),
         "seed": settings["seed"],
-        "model_type": "CNNBiLSTMAutoencoder",
+        "split_seed": settings["split_seed"],
+        "pooled_input": settings["pooled_input"],
+        "preserve_short_sequences": settings["preserve_short_sequences"],
+        "comparison_group": settings["comparison_group"],
+        "model_type": settings["architecture"],
+        "architecture": settings["architecture"],
         "input_length": settings["input_length"],
         "reconstruction_length": settings["reconstruction_length"],
+        "latent_dim": settings["latent_dim"],
+        "parameter_count": sum(
+            parameter.numel() for parameter in model.parameters()
+        ),
         "n_train": len(split_dfs["train"]),
         "n_validation": len(split_dfs["validation"]),
         "n_test": len(split_dfs["test"]),

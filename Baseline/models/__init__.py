@@ -8,5 +8,10 @@ from .cnn_lstm_bi import CNNBiLSTMEncoder, CNNBiLSTM
 from .cnn_lstm_bi_autoencoder import (
     CNNBiLSTMAutoencoder
 )
+from .autoencoder_variants import (
+    ConvolutionalAutoencoder,
+    FullyConnectedAutoencoder,
+    build_autoencoder,
+)
 from .astroconformer import AstroConformer
 from .astroconformer_v2 import AstroConformerV2

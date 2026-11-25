@@ -1,20 +1,29 @@
-"""Extract latent vectors and analyze reconstructions from a trained CNN-BiLSTM autoencoder.
+"""Extract latent vectors and analyze reconstructions from a trained autoencoder.
 
 Run from the thesis project root:
     python -m Baseline.analysis.analyze_autoencoder
     python -m Baseline.analysis.analyze_autoencoder --run-dir Baseline/results/autoencoder_YYYYMMDD_HHMMSS
 
 Uses the exact KIC split saved by train_autoencoder.py. Writes latent vectors,
-per-star reconstruction errors, PCA coordinates/plots, and test reconstructions.
+per-star reconstruction errors, PCA coordinates/plots, and test reconstructions
+to the selected run's latent_analysis directory and copies those outputs to
+Baseline/results_analysis/autoencoder/<run>/latent_analysis/.
 By default, analyzes the latest completed autoencoder run and ignores
 incomplete runs. A completed run has training metadata, evaluation metrics,
 configuration, split, and a model checkpoint.
 Also updates Baseline/results_analysis/autoencoder_runs.csv,
-autoencoder_split_metrics.csv, and plots/autoencoder_test_vs_baseline.png.
+autoencoder_split_metrics.csv, and plots comparing architecture, latent
+dimension, and PCA reconstruction errors.
 UMAP is optional: add --umap if umap-learn is installed.
+The analysis also fits a PCA reconstruction baseline on the training split
+and evaluates its component-count curves on validation and test splits. Use
+validation curves to select dimensions; reserve test metrics for final
+comparison. The aggregate plot compares runs with matching saved KIC splits.
 """
 import argparse
+import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import matplotlib
@@ -26,7 +35,7 @@ import torch
 import yaml
 from torch.utils.data import DataLoader
 
-from Baseline.models import CNNBiLSTMAutoencoder
+from Baseline.models import build_autoencoder
 from Baseline.paths import BASELINE_DIR, PROJECT_ROOT
 from Baseline.utils.reconstruction_dataset import AstroReconstructionDataset
 
@@ -34,6 +43,7 @@ from Baseline.utils.reconstruction_dataset import AstroReconstructionDataset
 DEFAULT_RESULTS_DIR = BASELINE_DIR / "results"
 RESULTS_ANALYSIS_DIR = BASELINE_DIR / "results_analysis"
 RESULTS_ANALYSIS_PLOTS_DIR = RESULTS_ANALYSIS_DIR / "plots"
+PCA_COMPONENT_COUNTS = (16, 32, 64, 128, 256, 512, 1024, 2048)
 
 
 def read_yaml(path):
@@ -42,6 +52,20 @@ def read_yaml(path):
     if not isinstance(cfg, dict):
         raise ValueError(f"Invalid YAML configuration: {path}")
     return cfg
+
+
+def split_signature(kics, split_names):
+    if len(kics) != len(split_names):
+        raise ValueError("KIC and split columns have different lengths.")
+    pairs = sorted(
+        (int(kic), str(split_name))
+        for kic, split_name in zip(kics, split_names)
+    )
+    return hashlib.sha256(
+        ";".join(f"{kic}:{split_name}" for kic, split_name in pairs).encode(
+            "utf-8"
+        )
+    ).hexdigest()[:16]
 
 
 def resolve_manifest(config, run_dir, metadata, explicit=None):
@@ -190,6 +214,42 @@ def export_results_analysis():
         metrics = json.loads((run_dir / "metrics.json").read_text())
         test_metrics = metrics["test_reconstruction"]
         baseline_metrics = metrics.get("constant_mean_baseline", {})
+        config = read_yaml(run_dir / "config.yaml")
+        autoencoder_config = config.get("autoencoder", {})
+        latent_dim = int(
+            metadata.get(
+                "latent_dim",
+                autoencoder_config.get(
+                    "latent_dim",
+                    2 * int(autoencoder_config.get("hidden_size", 128)),
+                ),
+            )
+        )
+        architecture = metadata.get(
+            "architecture",
+            autoencoder_config.get("architecture", "cnn_bilstm"),
+        )
+        pooled_input = bool(
+            metadata.get(
+                "pooled_input",
+                autoencoder_config.get("pooled_input", False),
+            )
+        )
+        preserve_short_sequences = bool(
+            metadata.get(
+                "preserve_short_sequences",
+                autoencoder_config.get("preserve_short_sequences", False),
+            )
+        )
+        input_representation = (
+            "pooled_reconstruction_grid"
+            if pooled_input or architecture == "fully_connected"
+            else "raw_cropped_light_curve"
+        )
+        split_df = pd.read_csv(run_dir / "split_kics.csv")
+        run_split_signature = split_signature(
+            split_df["kic"], split_df["split"]
+        )
         latent_metrics_path = (
             run_dir / "latent_analysis" / "latent_analysis_metrics.json"
         )
@@ -201,6 +261,21 @@ def export_results_analysis():
         run_records.append({
             "experiment_name": metadata.get("experiment_name", run_dir.name),
             "run_dir": str(run_dir),
+            "latent_dim": latent_dim,
+            "architecture": architecture,
+            "input_representation": input_representation,
+            "preserve_short_sequences": preserve_short_sequences,
+            "seed": metadata.get("seed"),
+            "split_seed": metadata.get(
+                "split_seed",
+                metadata.get("seed"),
+            ),
+            "comparison_group": metadata.get(
+                "comparison_group",
+                autoencoder_config.get("comparison_group"),
+            ),
+            "parameter_count": metadata.get("parameter_count"),
+            "split_signature": run_split_signature,
             "best_epoch": metadata.get("best_epoch"),
             "best_validation_mse": metadata.get("best_validation_loss"),
             "test_mse": test_metrics.get("mse"),
@@ -256,6 +331,16 @@ def export_results_analysis():
                     ].median(),
                 })
 
+    pca_records = []
+    for run_dir in sorted(DEFAULT_RESULTS_DIR.glob("autoencoder_*")):
+        if not run_dir.is_dir() or completed_run_problem(run_dir) is not None:
+            continue
+        pca_summary_path = (
+            run_dir / "latent_analysis" / "pca_reconstruction_summary.csv"
+        )
+        if pca_summary_path.is_file():
+            pca_records.extend(pd.read_csv(pca_summary_path).to_dict("records"))
+
     runs_df = pd.DataFrame(run_records)
     runs_path = RESULTS_ANALYSIS_DIR / "autoencoder_runs.csv"
     runs_df.to_csv(runs_path, index=False)
@@ -264,6 +349,33 @@ def export_results_analysis():
     split_path = RESULTS_ANALYSIS_DIR / "autoencoder_split_metrics.csv"
     pd.DataFrame(split_records).to_csv(split_path, index=False)
     print(f"Saved {split_path}")
+
+    if not runs_df.empty and "comparison_group" in runs_df:
+        repeated_runs = runs_df[runs_df["comparison_group"].notna()].copy()
+        if not repeated_runs.empty:
+            seed_summary = repeated_runs.groupby(
+                [
+                    "comparison_group",
+                    "architecture",
+                    "latent_dim",
+                    "input_representation",
+                    "split_signature",
+                ],
+                dropna=False,
+            ).agg(
+                n_runs=("experiment_name", "count"),
+                n_seeds=("seed", "nunique"),
+                mean_validation_mse=("best_validation_mse", "mean"),
+                std_validation_mse=("best_validation_mse", "std"),
+                mean_test_mse=("test_mse", "mean"),
+                std_test_mse=("test_mse", "std"),
+                mean_parameter_count=("parameter_count", "mean"),
+            ).reset_index()
+            seed_summary_path = (
+                RESULTS_ANALYSIS_DIR / "autoencoder_seed_summary.csv"
+            )
+            seed_summary.to_csv(seed_summary_path, index=False)
+            print(f"Saved {seed_summary_path}")
 
     if not runs_df.empty and runs_df[
         ["test_mse", "baseline_mse"]
@@ -295,6 +407,89 @@ def export_results_analysis():
         fig.savefig(plot_path, dpi=180)
         plt.close(fig)
         print(f"Saved {plot_path}")
+
+    if pca_records:
+        pca_df = pd.DataFrame(pca_records).drop_duplicates(
+            ["split_signature", "evaluation_split", "components"]
+        )
+        pca_df = pca_df.sort_values(
+            ["split_signature", "evaluation_split", "components"]
+        )
+        pca_path = RESULTS_ANALYSIS_DIR / "autoencoder_pca_reconstruction.csv"
+        pca_df.to_csv(pca_path, index=False)
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for (signature, evaluation_split), split_df in pca_df.groupby(
+            ["split_signature", "evaluation_split"], sort=True
+        ):
+            ax.plot(
+                split_df["components"],
+                split_df["mse"],
+                marker="o",
+                linestyle="-" if evaluation_split == "test" else ":",
+                label=f"PCA {evaluation_split} ({signature[:8]})",
+            )
+        analyzed_runs = (
+            runs_df[
+                runs_df["split_signature"].isin(pca_df["split_signature"])
+                & runs_df["latent_dim"].notna()
+                & runs_df["test_mse"].notna()
+            ]
+            if not runs_df.empty
+            else pd.DataFrame()
+        )
+        architecture_markers = {
+            "cnn_bilstm": "o",
+            "convolutional": "^",
+            "fully_connected": "s",
+        }
+        for architecture, architecture_df in analyzed_runs.groupby(
+            "architecture", sort=True
+        ):
+            marker = architecture_markers.get(architecture, "x")
+            ax.scatter(
+                architecture_df["latent_dim"],
+                architecture_df["best_validation_mse"],
+                marker=marker,
+                facecolors="none",
+                edgecolors="C0",
+                s=55,
+                label=f"{architecture} validation",
+                zorder=3,
+            )
+            ax.scatter(
+                architecture_df["latent_dim"],
+                architecture_df["test_mse"],
+                marker=marker,
+                color="C1",
+                s=48,
+                label=f"{architecture} test",
+                zorder=3,
+            )
+        ax.set_xscale("log", base=2)
+        ax.set_xlabel("PCA components / autoencoder latent dimensions")
+        ax.set_ylabel("Reconstruction MSE")
+        ax.set_title("Autoencoder vs. PCA reconstruction (validation and test)")
+        ax.grid(alpha=0.2)
+        ax.legend(fontsize="small")
+        fig.tight_layout()
+        plot_path = (
+            RESULTS_ANALYSIS_PLOTS_DIR
+            / "autoencoder_vs_pca_reconstruction.png"
+        )
+        fig.savefig(plot_path, dpi=180)
+        plt.close(fig)
+        print(f"Saved {pca_path}")
+        print(f"Saved {plot_path}")
+
+
+def copy_latent_analysis(run_dir, output_dir):
+    analysis_output_dir = (
+        RESULTS_ANALYSIS_DIR / "autoencoder" / run_dir.name / "latent_analysis"
+    )
+    if output_dir.resolve() != analysis_output_dir.resolve():
+        shutil.copytree(output_dir, analysis_output_dir, dirs_exist_ok=True)
+    print(f"Copied latent analysis outputs to {analysis_output_dir}")
 
 
 @torch.no_grad()
@@ -330,6 +525,138 @@ def extract(model, loader, device):
         np.concatenate(all_targets),
         np.concatenate(all_predictions),
     )
+
+
+def calculate_pca_baseline(targets, split, kics, output_dir):
+    from sklearn.decomposition import PCA
+
+    split = np.asarray(split).astype(str)
+    train_mask = split == "train"
+    validation_mask = split == "validation"
+    test_mask = split == "test"
+    if not train_mask.any() or not validation_mask.any() or not test_mask.any():
+        raise ValueError(
+            "PCA baseline requires nonempty train, validation, and test splits."
+        )
+
+    train_targets = np.asarray(targets[train_mask], dtype=np.float32)
+    evaluation_sets = (
+        ("validation", np.asarray(targets[validation_mask], dtype=np.float32),
+         np.asarray(kics)[validation_mask]),
+        ("test", np.asarray(targets[test_mask], dtype=np.float32),
+         np.asarray(kics)[test_mask]),
+    )
+    if not np.isfinite(train_targets).all() or any(
+        not np.isfinite(evaluation_targets).all()
+        for _, evaluation_targets, _ in evaluation_sets
+    ):
+        raise ValueError("PCA targets contain NaN or infinite values.")
+
+    max_components = min(len(train_targets) - 1, train_targets.shape[1])
+    if max_components < 1:
+        raise ValueError(
+            "PCA baseline requires at least two training samples."
+        )
+    fitted_components = min(max_components, max(PCA_COMPONENT_COUNTS))
+    component_counts = [
+        count for count in PCA_COMPONENT_COUNTS if count <= fitted_components
+    ]
+    if not component_counts or (
+        max_components < max(PCA_COMPONENT_COUNTS)
+        and component_counts[-1] != max_components
+    ):
+        component_counts.append(fitted_components)
+    component_counts = sorted(set(component_counts))
+
+    split_id = split_signature(kics, split)
+    pca = PCA(
+        n_components=fitted_components,
+        svd_solver="randomized",
+        random_state=42,
+    )
+    pca.fit(train_targets)
+    scored_sets = [
+        (
+            evaluation_split,
+            pca.transform(evaluation_targets),
+            evaluation_targets,
+            evaluation_kics,
+        )
+        for evaluation_split, evaluation_targets, evaluation_kics
+        in evaluation_sets
+    ]
+
+    summary_records = []
+    per_star_records = []
+    for count in component_counts:
+        for evaluation_split, scores, evaluation_targets, evaluation_kics in scored_sets:
+            reconstruction = (
+                scores[:, :count] @ pca.components_[:count]
+                + pca.mean_
+            )
+            errors = reconstruction - evaluation_targets
+            per_star_mse = np.mean(errors ** 2, axis=1)
+            per_star_rmse = np.sqrt(per_star_mse)
+            per_star_mae = np.mean(np.abs(errors), axis=1)
+            summary_records.append({
+                "split_signature": split_id,
+                "evaluation_split": evaluation_split,
+                "components": count,
+                "latent_fraction": count / train_targets.shape[1],
+                "n_train": len(train_targets),
+                "n_evaluation": len(evaluation_targets),
+                "explained_variance_ratio": float(
+                    np.sum(pca.explained_variance_ratio_[:count])
+                ),
+                "mse": float(np.mean(errors ** 2)),
+                "rmse": float(np.sqrt(np.mean(errors ** 2))),
+                "mae": float(np.mean(np.abs(errors))),
+            })
+            per_star_records.extend(
+                {
+                    "split_signature": split_id,
+                    "evaluation_split": evaluation_split,
+                    "kic": int(kic),
+                    "components": count,
+                    "mse": float(mse),
+                    "rmse": float(rmse),
+                    "mae": float(mae),
+                }
+                for kic, mse, rmse, mae in zip(
+                    evaluation_kics, per_star_mse, per_star_rmse, per_star_mae
+                )
+            )
+
+    pd.DataFrame(summary_records).to_csv(
+        output_dir / "pca_reconstruction_summary.csv", index=False
+    )
+    pd.DataFrame(per_star_records).to_csv(
+        output_dir / "pca_reconstruction_per_star.csv", index=False
+    )
+    return summary_records
+
+
+def plot_pca_reconstruction(summary_records, output_dir):
+    summary = pd.DataFrame(summary_records)
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for evaluation_split, split_df in summary.groupby(
+        "evaluation_split", sort=True
+    ):
+        ax.plot(
+            split_df["components"],
+            split_df["mse"],
+            marker="o",
+            label=f"{evaluation_split.title()} split",
+        )
+    ax.set_xscale("log", base=2)
+    ax.set_xlabel("PCA components")
+    ax.set_ylabel("Held-out reconstruction MSE")
+    ax.set_title("PCA reconstruction baseline")
+    ax.grid(alpha=0.2)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_dir / "pca_reconstruction_curve.png", dpi=160)
+    plt.close(fig)
 
 
 def plot_pca(embedding, metadata, output_dir, max_points):
@@ -521,6 +848,9 @@ def main():
     reconstruction_length = int(acfg["reconstruction_length"])
     hidden_size = int(acfg["hidden_size"])
     num_layers = int(acfg["num_layers"])
+    latent_dim = int(
+        acfg.get("latent_dim", 2 * hidden_size)
+    )
     batch_size = args.batch_size or int(acfg.get("batch_size", 16))
     num_workers = (int(acfg.get("num_workers", 0)) if args.num_workers is None
                    else args.num_workers)
@@ -538,10 +868,16 @@ def main():
         raise FileNotFoundError(f"No checkpoint found in {run_dir}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = CNNBiLSTMAutoencoder(
+    architecture = acfg.get("architecture", "cnn_bilstm")
+    model = build_autoencoder(
+        architecture=architecture,
         hidden_size=hidden_size,
         num_layers=num_layers,
+        latent_dim=latent_dim,
         reconstruction_length=reconstruction_length,
+        preserve_short_sequences=bool(
+            acfg.get("preserve_short_sequences", False)
+        ),
     ).to(device)
     model.load_state_dict(load_checkpoint(checkpoint_path, device), strict=True)
     model.eval()
@@ -551,6 +887,7 @@ def main():
         target_length=input_length,
         reconstruction_length=reconstruction_length,
         deterministic=True,
+        pooled_input=bool(acfg.get("pooled_input", False)),
     )
     loader = DataLoader(
         dataset, batch_size=batch_size, shuffle=False,
@@ -590,12 +927,25 @@ def main():
         )
     result.to_csv(output_dir / "latent_vectors.csv", index=False)
 
+    pca_summary = calculate_pca_baseline(
+        targets,
+        result["split"].to_numpy(),
+        kics,
+        output_dir,
+    )
+    plot_pca_reconstruction(pca_summary, output_dir)
+
     summary = {
         "run_dir": str(run_dir),
         "checkpoint": str(checkpoint_path.resolve()),
         "manifest": str(manifest_path),
         "n_stars": int(len(kics)),
         "embedding_dim": int(embeddings.shape[1]),
+        "latent_dim": latent_dim,
+        "architecture": architecture,
+        "preserve_short_sequences": bool(
+            acfg.get("preserve_short_sequences", False)
+        ),
         "reconstruction_mse": float(np.mean(errors ** 2)),
         "reconstruction_rmse": float(np.sqrt(np.mean(errors ** 2))),
         "reconstruction_mae": float(np.mean(np.abs(errors))),
@@ -614,6 +964,7 @@ def main():
         kics, targets, predictions, result["split"],
         output_dir, args.reconstruction_examples
     )
+    copy_latent_analysis(run_dir, output_dir)
     export_results_analysis()
 
     print("Latent analysis complete.")

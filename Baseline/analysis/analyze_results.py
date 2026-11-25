@@ -244,7 +244,8 @@ def bar_plot(df, metric, title, filename, subset=None):
 
     fig, ax = plt.subplots(figsize=(10, max(4, 0.45 * len(data))))
     ax.barh(data["label"], data[metric])
-    ax.set_xlabel(metric)
+    xlabel = r"$\nu_{\max}$ RMSE" if metric == "nu_max_rmse" else metric
+    ax.set_xlabel(xlabel)
     ax.set_title(title)
     ax.invert_yaxis()
     fig.tight_layout()
@@ -296,7 +297,7 @@ def main():
 
     bar_plot(
         selected, "nu_max_rmse",
-        "Architecture comparison: nu_max RMSE (LC, 80d)",
+        r"Architecture comparison: $\nu_{\max}$ RMSE (LC, 80d)",
         "architecture_nu_max_rmse.png", common
     )
     bar_plot(
@@ -319,7 +320,7 @@ def main():
     # A fair comparison also requires consistent data splits, target scaling,
     # evaluation procedures and comparable training settings.
     for metric, label in [
-        ("nu_max_rmse", "nu_max RMSE"),
+        ("nu_max_rmse", r"$\nu_{\max}$ RMSE"),
         ("delta_nu_rmse", "delta_nu RMSE"),
         ("class_balanced_accuracy", "Class balanced accuracy"),
     ]:
@@ -363,7 +364,7 @@ def main():
     ]
 
     for metric, label in [
-        ("nu_max_rmse", "nu_max RMSE"),
+        ("nu_max_rmse", r"$\nu_{\max}$ RMSE"),
         ("delta_nu_rmse", "delta_nu RMSE"),
         ("class_balanced_accuracy", "Class balanced accuracy"),
     ]:
@@ -517,7 +518,7 @@ def main():
     bar_plot(
         selected,
         "nu_max_rmse",
-        "Two-target architecture comparison: nu_max RMSE (LC, 80d)",
+        r"Two-target architecture comparison: $\nu_{\max}$ RMSE (LC, 80d)",
         "two_target_architecture_nu_max_rmse.png",
         two_target_lc,
     )
@@ -539,7 +540,7 @@ def main():
     # Interpret differences cautiously if training settings, optimization
     # or model selection differ between the experiments.
     for metric, label in [
-        ("nu_max_rmse", "nu_max RMSE"),
+        ("nu_max_rmse", r"$\nu_{\max}$ RMSE"),
         ("delta_nu_rmse", "delta_nu RMSE"),
     ]:
         subset = selected[

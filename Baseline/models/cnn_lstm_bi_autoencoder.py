@@ -19,7 +19,9 @@ class CNNBiLSTMAutoencoder(nn.Module):
         self,
         hidden_size=128,
         num_layers=2,
-        reconstruction_length=4096
+        reconstruction_length=4096,
+        latent_dim=None,
+        preserve_short_sequences=False,
     ):
         super().__init__()
 
@@ -29,10 +31,21 @@ class CNNBiLSTMAutoencoder(nn.Module):
 
         self.encoder = CNNBiLSTMEncoder(
             hidden_size=hidden_size,
-            num_layers=num_layers
+            num_layers=num_layers,
+            preserve_short_sequences=preserve_short_sequences,
         )
 
-        embedding_dim = self.encoder.embedding_dim
+        encoder_dim = self.encoder.embedding_dim
+        self.latent_dim = (
+            encoder_dim if latent_dim is None else int(latent_dim)
+        )
+        if self.latent_dim <= 0:
+            raise ValueError("latent_dim must be positive.")
+        self.bottleneck = (
+            nn.Identity()
+            if self.latent_dim == encoder_dim
+            else nn.Linear(encoder_dim, self.latent_dim)
+        )
 
         # ---------------------------------------------------------
         # Decoder
@@ -41,7 +54,7 @@ class CNNBiLSTMAutoencoder(nn.Module):
         self.decoder = nn.Sequential(
 
             nn.Linear(
-                embedding_dim,
+                self.latent_dim,
                 512
             ),
 
@@ -68,7 +81,7 @@ class CNNBiLSTMAutoencoder(nn.Module):
 
     def forward(self, x):
 
-        embedding = self.encoder(x)
+        embedding = self.bottleneck(self.encoder(x))
 
         reconstruction = self.decoder(
             embedding

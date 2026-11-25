@@ -22,7 +22,8 @@ class AstroReconstructionDataset(Dataset):
 
         x:
             Input light curve
-            Shape: (1, target_length)
+            Shape: (1, target_length), or (1, reconstruction_length) when
+            pooled_input is enabled.
 
         target:
             Coarse reconstruction target
@@ -37,7 +38,8 @@ class AstroReconstructionDataset(Dataset):
         manifest_df,
         target_length=65000,
         reconstruction_length=4096,
-        deterministic=False
+        deterministic=False,
+        pooled_input=False,
     ):
         self.df = manifest_df.reset_index(drop=True)
 
@@ -45,6 +47,7 @@ class AstroReconstructionDataset(Dataset):
         self.reconstruction_length = reconstruction_length
 
         self.deterministic = deterministic
+        self.pooled_input = pooled_input
 
     def __getitem__(self, index):
 
@@ -134,6 +137,9 @@ class AstroReconstructionDataset(Dataset):
         # Shape:
         #
         # (4096,)
+
+        if self.pooled_input:
+            x = target.unsqueeze(0)
 
         return x, target, row["kic"]
 

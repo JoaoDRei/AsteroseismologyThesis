@@ -148,8 +148,201 @@ experiments = [
         "lc",
         "80d",
         [],
-        "Unsupervised CNN-BiLSTM reconstruction baseline.",
+        "CNN-BiLSTM baseline with a 256-dimensional latent bottleneck.",
         "autoencoder",
+        "cnn_bilstm",
+        256,
+    ),
+    (
+        "06_autoencoder",
+        "F1_cnn_bilstm_autoencoder_z32_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "CNN-BiLSTM autoencoder with a 32-dimensional latent bottleneck.",
+        "autoencoder",
+        "cnn_bilstm",
+        32,
+    ),
+    (
+        "06_autoencoder",
+        "F2_cnn_bilstm_autoencoder_z64_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "CNN-BiLSTM autoencoder with a 64-dimensional latent bottleneck.",
+        "autoencoder",
+        "cnn_bilstm",
+        64,
+    ),
+    (
+        "06_autoencoder",
+        "F3_cnn_bilstm_autoencoder_z128_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "CNN-BiLSTM autoencoder with a 128-dimensional latent bottleneck.",
+        "autoencoder",
+        "cnn_bilstm",
+        128,
+    ),
+    (
+        "06_autoencoder",
+        "F4_cnn_bilstm_autoencoder_z512_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "CNN-BiLSTM autoencoder with a 512-dimensional latent bottleneck.",
+        "autoencoder",
+        "cnn_bilstm",
+        512,
+    ),
+    (
+        "06_autoencoder",
+        "F5_convolutional_autoencoder_z64_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Convolutional autoencoder with a 64-dimensional latent bottleneck.",
+        "autoencoder",
+        "convolutional",
+        64,
+    ),
+    (
+        "06_autoencoder",
+        "F6_convolutional_autoencoder_z256_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Convolutional autoencoder with a 256-dimensional latent bottleneck.",
+        "autoencoder",
+        "convolutional",
+        256,
+    ),
+    (
+        "06_autoencoder",
+        "F7_fully_connected_autoencoder_z64_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Fully connected autoencoder with a 64-dimensional latent bottleneck.",
+        "autoencoder",
+        "fully_connected",
+        64,
+    ),
+    (
+        "06_autoencoder",
+        "F8_fully_connected_autoencoder_z256_lc_80d",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Fully connected autoencoder with a 256-dimensional latent bottleneck.",
+        "autoencoder",
+        "fully_connected",
+        256,
+    ),
+    (
+        "06_autoencoder",
+        "F9_cnn_bilstm_pooled_z64_seed42",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Matched pooled-input CNN-BiLSTM 64D run, seed 42.",
+        "autoencoder",
+        "cnn_bilstm",
+        64,
+        42,
+    ),
+    (
+        "06_autoencoder",
+        "F10_cnn_bilstm_pooled_z64_seed43",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Matched pooled-input CNN-BiLSTM 64D run, seed 43.",
+        "autoencoder",
+        "cnn_bilstm",
+        64,
+        43,
+    ),
+    (
+        "06_autoencoder",
+        "F11_cnn_bilstm_pooled_z64_seed44",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Matched pooled-input CNN-BiLSTM 64D run, seed 44.",
+        "autoencoder",
+        "cnn_bilstm",
+        64,
+        44,
+    ),
+    (
+        "06_autoencoder",
+        "F12_fully_connected_pooled_z64_seed42",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Matched pooled-input fully connected 64D run, seed 42.",
+        "autoencoder",
+        "fully_connected",
+        64,
+        42,
+    ),
+    (
+        "06_autoencoder",
+        "F13_fully_connected_pooled_z64_seed43",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Matched pooled-input fully connected 64D run, seed 43.",
+        "autoencoder",
+        "fully_connected",
+        64,
+        43,
+    ),
+    (
+        "06_autoencoder",
+        "F14_fully_connected_pooled_z64_seed44",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        "Matched pooled-input fully connected 64D run, seed 44.",
+        "autoencoder",
+        "fully_connected",
+        64,
+        44,
+    ),
+    (
+        "06_autoencoder",
+        "F15_cnn_bilstm_no_repeat_pooled_z64_seed42",
+        "cnn_bilstm_autoencoder",
+        "lc",
+        "80d",
+        [],
+        (
+            "Diagnostic CNN-BiLSTM 64D run that keeps the CNN's 64 output "
+            "steps instead of upsampling them to 256."
+        ),
+        "autoencoder",
+        "cnn_bilstm",
+        64,
+        42,
+        True,
     ),
 ]
 
@@ -216,6 +409,19 @@ cv_experiments = [
         "Five-fold KIC-level CV for regression-only ResNet1D.",
         "cross_validate",
     ),
+    (
+        "07_cross_validation",
+        "CV5_resnet1d_psd_80d",
+        "resnet1d",
+        "psd",
+        "80d",
+        CV_TARGETS,
+        (
+            "Five-fold KIC-level CV for the highest balanced-accuracy "
+            "PSD multitask model (ResNet1D)."
+        ),
+        "cross_validate",
+    ),
 ]
 
 phase_order = {
@@ -262,13 +468,27 @@ for experiment in all_experiments:
         "input": mode,
         "duration": duration,
         "targets": "+".join(targets),
+        "architecture": experiment[8] if trainer == "autoencoder" else "",
+        "latent_dim": experiment[9] if trainer == "autoencoder" else "",
+        "seed": experiment[10] if trainer == "autoencoder" and len(experiment) > 10 else "",
+        "split_seed": 42 if trainer == "autoencoder" and len(experiment) > 10 else "",
+        "input_representation": (
+            "pooled_reconstruction_grid"
+            if trainer == "autoencoder" and len(experiment) > 10
+            else ""
+        ),
+        "max_epochs": 200 if trainer == "autoencoder" and len(experiment) > 10 else "",
+        "preserve_short_sequences": (
+            experiment[11]
+            if trainer == "autoencoder" and len(experiment) > 11
+            else ""
+        ),
         "config_path": config_path.relative_to(PROJECT_ROOT).as_posix(),
         "status": "planned",
         "purpose": purpose,
     })
 
-    # Keep the existing 01-06 experiment artifacts untouched.
-    if phase != "07_cross_validation":
+    if phase not in {"06_autoencoder", "07_cross_validation"}:
         continue
 
     exp_dir.mkdir(parents=True, exist_ok=True)
@@ -288,6 +508,25 @@ for experiment in all_experiments:
         cfg.setdefault("autoencoder", {})
         cfg["autoencoder"]["enabled"] = True
         cfg["autoencoder"]["output_dir"] = "./Baseline/results"
+        if len(experiment) > 9:
+            cfg["autoencoder"]["architecture"] = experiment[8]
+            cfg["autoencoder"]["latent_dim"] = int(experiment[9])
+        if len(experiment) > 10:
+            cfg["training"]["seed"] = int(experiment[10])
+            cfg["autoencoder"].update({
+                "split_seed": 42,
+                "pooled_input": True,
+                "comparison_group": (
+                    "pooled_input_z64_no_repeat_diagnostic"
+                    if len(experiment) > 11 and experiment[11]
+                    else "pooled_input_z64_seed_repeats"
+                ),
+                "epochs": 200,
+            })
+            if len(experiment) > 11:
+                cfg["autoencoder"]["preserve_short_sequences"] = bool(
+                    experiment[11]
+                )
 
     # Cross-validation-specific configuration
     if trainer == "cross_validate":
@@ -324,7 +563,54 @@ for experiment in all_experiments:
                 if target in cfg["model"][key]
             }
 
-    if config_path.exists():
+    if config_path.exists() and trainer == "autoencoder":
+        with config_path.open("r", encoding="utf-8") as config_file:
+            existing_config = yaml.safe_load(config_file)
+        if not isinstance(existing_config, dict):
+            raise ValueError(f"Invalid experiment configuration: {config_path}")
+        autoencoder_config = existing_config.setdefault("autoencoder", {})
+        if not isinstance(autoencoder_config, dict):
+            raise ValueError(
+                f"Expected an autoencoder mapping in {config_path}"
+            )
+        planned_architecture = experiment[8]
+        planned_latent_dim = int(experiment[9])
+        if (
+            autoencoder_config.get("architecture") != planned_architecture
+            or autoencoder_config.get("latent_dim") != planned_latent_dim
+        ):
+            autoencoder_config["architecture"] = planned_architecture
+            autoencoder_config["latent_dim"] = planned_latent_dim
+            with config_path.open("w", encoding="utf-8") as config_file:
+                yaml.safe_dump(existing_config, config_file, sort_keys=False)
+            print(f"Updated planned latent dimension in {config_path}")
+        if len(experiment) > 10:
+            existing_config.setdefault("training", {})["seed"] = int(
+                experiment[10]
+            )
+            autoencoder_config.update({
+                "split_seed": 42,
+                "pooled_input": True,
+                "comparison_group": (
+                    "pooled_input_z64_no_repeat_diagnostic"
+                    if len(experiment) > 11 and experiment[11]
+                    else "pooled_input_z64_seed_repeats"
+                ),
+                "epochs": 200,
+            })
+            if len(experiment) > 11:
+                autoencoder_config["preserve_short_sequences"] = bool(
+                    experiment[11]
+                )
+            with config_path.open("w", encoding="utf-8") as config_file:
+                yaml.safe_dump(existing_config, config_file, sort_keys=False)
+            print(f"Updated matched-seed comparison settings in {config_path}")
+        elif (
+            autoencoder_config.get("architecture") == planned_architecture
+            and autoencoder_config.get("latent_dim") == planned_latent_dim
+        ):
+            print(f"Preserving existing config: {config_path}")
+    elif config_path.exists():
         print(f"Preserving existing config: {config_path}")
     else:
         with open(config_path, "w") as f:
@@ -333,7 +619,7 @@ for experiment in all_experiments:
     if readme_path.exists():
         print(f"Preserving existing README: {readme_path}")
     else:
-        readme_path.write_text(
+        readme = (
             f"# {name}\n\n"
             f"- **Phase:** {phase}\n"
             f"- **Trainer:** {trainer}\n"
@@ -341,18 +627,51 @@ for experiment in all_experiments:
             f"- **Input:** {mode}\n"
             f"- **Duration:** {duration}\n"
             f"- **Targets:** {', '.join(targets) if targets else 'None'}\n"
+        )
+        if trainer == "autoencoder" and len(experiment) > 9:
+            readme += (
+                f"- **Architecture:** {experiment[8]}\n"
+                f"- **Latent dimension:** {experiment[9]}\n"
+            )
+        if trainer == "autoencoder" and len(experiment) > 10:
+            readme += (
+                f"- **Training seed:** {experiment[10]}\n"
+                "- **Split seed:** 42 (fixed across comparison runs)\n"
+                "- **Input:** shared 4096-point pooled reconstruction grid\n"
+                "- **Maximum epochs:** 200 with early stopping\n"
+            )
+        if trainer == "autoencoder" and len(experiment) > 11:
+            readme += (
+                "- **Encoder diagnostic:** keep CNN sequences at their "
+                "native length when at most 256 steps; pool only longer "
+                "sequences.\n"
+            )
+        readme += (
             f"- **Purpose:** {purpose}\n\n"
             "## Before running\n"
             "- Verify loss functions and target weights in config.yaml.\n"
             "- Verify the manifest and input paths.\n"
             "- Verify that the intended data split is KIC-level.\n"
             "- Record any deviations from the planned experiment.\n\n"
+        )
+        if trainer == "autoencoder":
+            readme += (
+                "## Reconstruction comparison\n"
+                "- Use the same saved KIC split for all bottleneck dimensions.\n"
+                "- The fully connected encoder receives the light curve "
+                "adaptively pooled to the reconstruction grid.\n"
+                "- PCA is fit on training targets; use validation curves to "
+                "select component counts.\n"
+                "- Keep test metrics for the final comparison only.\n\n"
+            )
+        readme += (
             "## Results\n"
             "- Run directory:\n"
             "- Best epoch / fold results:\n"
             "- Evaluation metrics:\n"
             "- Notes:\n"
         )
+        readme_path.write_text(readme)
 
 plan_path = EXPERIMENTS_DIR / "experiment_plan.csv"
 plan_path.parent.mkdir(parents=True, exist_ok=True)
@@ -388,7 +707,7 @@ interpretation_experiments = [
         "status": "planned",
     },
 
-        {
+    {
         "analysis_id": "I0_cnn_lstm_lc_regression_sg",
         "model": "cnn_lstm",
         "mode": "lc",
@@ -416,7 +735,7 @@ interpretation_experiments = [
         "max_samples": 10,
         "status": "planned",
     },
-        {
+    {
         "analysis_id": "I1_astroconformer_v2_psd_regression_sg",
         "model": "astroconformer_v2",
         "mode": "psd",
@@ -445,8 +764,8 @@ interpretation_experiments = [
         "max_samples": 10,
         "status": "planned",
     },
-        {
-        "analysis_id": "I2_resnet1d_lc_multitask_ig",
+    {
+        "analysis_id": "I2_resnet1d_lc_multitask_sg",
         "model": "resnet1d",
         "mode": "lc",
         "duration": "80d",
@@ -460,6 +779,85 @@ interpretation_experiments = [
         "max_samples": 10,
         "status": "planned",
     },
+    {
+        "analysis_id": "I3_cnn_psd_regression_ig",
+        "model": "cnn",
+        "mode": "psd",
+        "duration": "80d",
+        "targets": "nu_max+delta_nu",
+        "run_dir": (
+            "Baseline/results/"
+            "cnn_psd_80d_nu_max_delta_nu_20261020_121852_203148"
+        ),
+        "method": "ig",
+        "max_samples": 10,
+        "status": "planned",
+    },
+    {
+        "analysis_id": "I3_cnn_psd_regression_sg",
+        "model": "cnn",
+        "mode": "psd",
+        "duration": "80d",
+        "targets": "nu_max+delta_nu",
+        "run_dir": (
+            "Baseline/results/"
+            "cnn_psd_80d_nu_max_delta_nu_20261020_121852_203148"
+        ),
+        "method": "smoothgrad",
+        "max_samples": 10,
+        "status": "planned",
+    },
+    {
+        "analysis_id": "I4_resnet1d_psd_multitask_ig",
+        "model": "resnet1d",
+        "mode": "psd",
+        "duration": "80d",
+        "targets": "nu_max+delta_nu+class",
+        "run_dir": (
+            "Baseline/results/"
+            "resnet1d_psd_80d_nu_max_delta_nu_class_"
+            "20261018_190922_635749"
+        ),
+        "method": "ig",
+        "max_samples": 10,
+        "status": "planned",
+    },
+    {
+        "analysis_id": "I4_resnet1d_psd_multitask_sg",
+        "model": "resnet1d",
+        "mode": "psd",
+        "duration": "80d",
+        "targets": "nu_max+delta_nu+class",
+        "run_dir": (
+            "Baseline/results/"
+            "resnet1d_psd_80d_nu_max_delta_nu_class_"
+            "20261018_190922_635749"
+        ),
+        "method": "smoothgrad",
+        "max_samples": 10,
+        "status": "planned",
+    },
+    {
+        "analysis_id": "I4_resnet1d_psd_multitask_smoothgrad_ig",
+        "model": "resnet1d",
+        "mode": "psd",
+        "duration": "80d",
+        "targets": "nu_max+delta_nu+class",
+        "run_dir": (
+            "Baseline/results/"
+            "resnet1d_psd_80d_nu_max_delta_nu_class_"
+            "20261018_190922_635749"
+        ),
+        "method": "smoothgrad_ig",
+        "max_samples": 10,
+        "output_dir": (
+            "Baseline/results/"
+            "resnet1d_psd_80d_nu_max_delta_nu_class_"
+            "20261018_190922_635749/"
+            "interpretability_robustness"
+        ),
+        "status": "planned",
+    },
 ]
 
 interpretation_plan_path = (
@@ -469,7 +867,11 @@ interpretation_plan_path = (
 with open(interpretation_plan_path, "w", newline="") as f:
     writer = csv.DictWriter(
         f,
-        fieldnames=interpretation_experiments[0].keys(),
+        fieldnames=list(dict.fromkeys(
+            key
+            for experiment in interpretation_experiments
+            for key in experiment
+        )),
     )
     writer.writeheader()
     writer.writerows(interpretation_experiments)
@@ -478,8 +880,10 @@ with open(interpretation_plan_path, "w", newline="") as f:
 # Summary
 # =========================================================
 
-print("Preserved existing experiment configs and READMEs for phases 01-06.")
-print(f"Created or preserved {len(cv_experiments)} cross-validation experiment folders.")
+print("Preserved existing configs and generated missing study configs.")
+print(
+    f"Created or preserved {len(cv_experiments)} cross-validation experiment folders."
+)
 print(f"Experiment plan: {plan_path}")
 print(f"Interpretability plan: {interpretation_plan_path}")
 print("Review the generated configs before submitting jobs.")

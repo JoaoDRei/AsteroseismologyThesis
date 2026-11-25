@@ -20,9 +20,11 @@ class CNNBiLSTMEncoder(nn.Module):
     def __init__(
         self,
         hidden_size=128,
-        num_layers=2
+        num_layers=2,
+        preserve_short_sequences=False,
     ):
         super().__init__()
+        self.preserve_short_sequences = bool(preserve_short_sequences)
 
         # ---------------------------------------------------------
         # 1. CNN feature extractor
@@ -130,8 +132,8 @@ class CNNBiLSTMEncoder(nn.Module):
         # CNN
         x = self.cnn(x)
 
-        # (B, 128, L') -> (B, 128, 256)
-        x = self.sequence_pool(x)
+        if not self.preserve_short_sequences or x.size(-1) > 256:
+            x = self.sequence_pool(x)
 
         # LSTM expects (B, sequence, features)
         x = x.transpose(1, 2)

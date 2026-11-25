@@ -1,6 +1,7 @@
 processed_ml_data_APOKASC3/
 Baseline/results/
 Baseline/__pycache__/
+Baseline/analysis/__pycache__/
 Baseline/benchmark_cache/
 Baseline/manifest_80d_plots
 Baseline/benchmark_catalogue_hits.csv
@@ -9,3 +10,17 @@ Baseline/benchmark_stars.csv
 Baseline/manifest.csv
 Baseline/models/__pycache__/
 Baseline/utils/__pycache__/
+Baseline/results_analysis
+Baseline/results
+Baseline/experiments
+Baseline/Granulation/__pycache__/
+Baseline/Granulation/kepseismic_data_APOKASC3
+Baseline/interpretation
+Baseline/orchestration/__pycache__/
+Baseline/slurm_logs
+Baseline/tools/__pycache__/
+Baseline/training/__pycache__/
+Baseline/utils/__pycache__/
+data/
+General_Scripts/__pycache__/
+results/
